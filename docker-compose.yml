@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: library
+      POSTGRES_PASSWORD: library
+      POSTGRES_DB: library
+    volumes:
+      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U library"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - ${REDIS_DATA_DIR:-./data/redis}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://library:library@db:5432/library
+      - SYNC_DATABASE_URL=postgresql+psycopg2://library:library@db:5432/library
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-supersecretkey-change-in-production-32chars}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - UPLOAD_DIR=/app/uploads
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      - ./backend:/app
+      - ${UPLOADS_DIR:-./data/uploads}:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q book_processing
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://library:library@db:5432/library
+      - SYNC_DATABASE_URL=postgresql+psycopg2://library:library@db:5432/library
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-supersecretkey-change-in-production-32chars}
+      - UPLOAD_DIR=/app/uploads
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      - ./backend:/app
+      - ${UPLOADS_DIR:-./data/uploads}:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      - api
