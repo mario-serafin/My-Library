@@ -40,6 +40,7 @@ services:
       - UPLOAD_DIR=/app/uploads
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
     volumes:
       - ./backend:/app
       - ${UPLOADS_DIR:-./data/uploads}:/app/uploads
@@ -61,6 +62,7 @@ services:
       - SECRET_KEY=${SECRET_KEY:-supersecretkey-change-in-production-32chars}
       - UPLOAD_DIR=/app/uploads
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
     volumes:
       - ./backend:/app
       - ${UPLOADS_DIR:-./data/uploads}:/app/uploads

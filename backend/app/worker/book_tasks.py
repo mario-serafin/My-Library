@@ -8,7 +8,7 @@ from app.database import SyncSessionLocal
 from app.models.task import ProcessingTask, TaskStatus
 from app.models.book import Book
 from app.services.ocr import extract_title_author, GeminiRateLimitError, GeminiTransientError
-from app.services.book_search import search_openlibrary_sync, is_high_confidence
+from app.services.book_search import search_books_sync, is_high_confidence
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ def process_book_image(self, task_id: int):
             return
 
         # ── 5. OpenLibrary search ─────────────────────────────────────────────
-        candidates = search_openlibrary_sync(title=title, author=author, limit=10)
+        candidates = search_books_sync(title=title, author=author, limit=10)
         task.book_candidates = candidates
         db.commit()
 

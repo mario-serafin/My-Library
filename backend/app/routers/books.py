@@ -9,7 +9,7 @@ from app.models.book import Book
 from app.models.user import User
 from app.schemas.book import BookCreate, BookUpdate, BookResponse, PaginatedBooks, BookSearchRequest, BookCandidate
 from app.services.auth import get_current_user
-from app.services.book_search import search_openlibrary
+from app.services.book_search import search_books
 
 router = APIRouter(prefix="/api/books", tags=["books"])
 
@@ -51,7 +51,7 @@ async def search_books(
     req: BookSearchRequest,
     _: User = Depends(get_current_user),
 ):
-    return await search_openlibrary(title=req.title, author=req.author, limit=15)
+    return await search_books(title=req.title, author=req.author, limit=15)
 
 
 @router.post("", response_model=BookResponse, status_code=201)

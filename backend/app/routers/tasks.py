@@ -15,7 +15,7 @@ from app.models.user import User
 from app.schemas.task import TaskResponse, TaskRetryRequest, TaskConfirmRequest, PaginatedTasks
 from app.schemas.book import BookCandidate
 from app.services.auth import get_current_user
-from app.services.book_search import search_openlibrary
+from app.services.book_search import search_books
 from app.config import settings
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -133,7 +133,7 @@ async def retry_task(
     task.ocr_author = req.author
     await db.commit()
 
-    candidates = await search_openlibrary(title=req.title, author=req.author, limit=15)
+    candidates = await search_books(title=req.title, author=req.author, limit=15)
     task.book_candidates = candidates
     await db.commit()
 

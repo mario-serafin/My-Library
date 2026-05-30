@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD: str = "admin"
     CORS_ORIGINS: str = "*"
     GEMINI_API_KEY: str = ""
+    GOOGLE_BOOKS_API_KEY: str = ""
 
     model_config = {"env_file": ".env"}
 
