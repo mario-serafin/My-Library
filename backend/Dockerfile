@@ -1,9 +1,12 @@
-FROM python:3.11-slim
+FROM python:3.11-alpine
 
-RUN apt-get update && apt-get install -y \
-    libpq-dev \
+RUN apk add --no-cache \
+    postgresql-dev \
     gcc \
-    && rm -rf /var/lib/apt/lists/*
+    musl-dev \
+    libffi-dev \
+    jpeg-dev \
+    zlib-dev
 
 WORKDIR /app
 
