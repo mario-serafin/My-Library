@@ -27,7 +27,9 @@ services:
       retries: 5
 
   api:
-    build: ./backend
+    build:
+      context: ./backend
+      network: host
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - DATABASE_URL=postgresql+asyncpg://library:library@db:5432/library
@@ -48,7 +50,9 @@ services:
         condition: service_healthy
 
   worker:
-    build: ./backend
+    build:
+      context: ./backend
+      network: host
     command: celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q book_processing
     environment:
       - DATABASE_URL=postgresql+asyncpg://library:library@db:5432/library
@@ -67,7 +71,9 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      network: host
     ports:
       - "${PORT:-80}:80"
     depends_on:
