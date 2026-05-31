@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.book import BookCreate, BookUpdate, BookResponse, PaginatedBooks, BookSearchRequest, BookCandidate
 from app.services.auth import get_current_user
 from app.services.book_search import search_books
+from app.services.section_assignment import assign_section_id_async
 
 router = APIRouter(prefix="/api/books", tags=["books"])
 
@@ -65,7 +66,16 @@ async def create_book(
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Book already in collection")
 
-    book = Book(**data.model_dump(), added_by=current_user.id)
+    section_id = await assign_section_id_async(
+        title=data.title,
+        author=data.author or "",
+        genres=data.genres or "",
+        fallback_section_id=data.section_id or current_user.default_section_id,
+        db=db,
+    )
+    book_data = data.model_dump()
+    book_data["section_id"] = section_id
+    book = Book(**book_data, added_by=current_user.id)
     db.add(book)
     await db.commit()
     await db.refresh(book)

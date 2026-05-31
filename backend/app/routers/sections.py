@@ -42,6 +42,8 @@ async def update_section(
     section = result.scalar_one_or_none()
     if not section:
         raise HTTPException(status_code=404, detail="Section not found")
+    if section.is_system:
+        raise HTTPException(status_code=403, detail="Le sezioni di sistema non possono essere modificate")
     for field, val in data.model_dump(exclude_none=True).items():
         setattr(section, field, val)
     await db.commit()
@@ -59,5 +61,7 @@ async def delete_section(
     section = result.scalar_one_or_none()
     if not section:
         raise HTTPException(status_code=404, detail="Section not found")
+    if section.is_system:
+        raise HTTPException(status_code=403, detail="Le sezioni di sistema non possono essere eliminate")
     await db.delete(section)
     await db.commit()

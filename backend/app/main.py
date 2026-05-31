@@ -5,15 +5,26 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine, Base, async_session_maker
 from app.models import User, UserRole, Section
 from app.services.auth import get_password_hash
+from app.services.section_assignment import DEFAULT_SECTIONS
 from app.routers import auth, books, sections, tasks, users
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+async def _migrate():
+    """Add columns that may not exist on older DB schemas."""
+    async with engine.begin() as conn:
+        await conn.execute(text(
+            "ALTER TABLE sections ADD COLUMN IF NOT EXISTS "
+            "is_system BOOLEAN NOT NULL DEFAULT false"
+        ))
 
 
 async def _create_default_admin():
@@ -36,11 +47,30 @@ async def _create_default_admin():
         await db.commit()
 
 
+async def _seed_default_sections():
+    """Create fixed system sections if they don't exist yet."""
+    from sqlalchemy import select
+    async with async_session_maker() as db:
+        for s in DEFAULT_SECTIONS:
+            result = await db.execute(select(Section).where(Section.name == s["name"]))
+            if not result.scalar_one_or_none():
+                db.add(Section(
+                    name=s["name"],
+                    description=s["description"],
+                    genres=s["genres"],
+                    is_system=True,
+                ))
+                logger.info("Seeded system section: %s", s["name"])
+        await db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await _migrate()
     await _create_default_admin()
+    await _seed_default_sections()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     yield
     await engine.dispose()

@@ -22,4 +22,5 @@ class SectionResponse(BaseModel):
     name: str
     description: Optional[str]
     genres: Optional[str]
+    is_system: bool
     created_at: datetime

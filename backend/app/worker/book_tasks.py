@@ -9,6 +9,7 @@ from app.models.task import ProcessingTask, TaskStatus
 from app.models.book import Book
 from app.services.ocr import extract_title_author, GeminiRateLimitError, GeminiTransientError
 from app.services.book_search import search_books_sync, is_high_confidence
+from app.services.section_assignment import assign_section_id
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,13 @@ def process_book_image(self, task_id: int):
                 task.book_id = existing.id
                 task.status = TaskStatus.completed
             else:
+                section_id = assign_section_id(
+                    title=best.get("title", ""),
+                    author=best.get("author", ""),
+                    genres=best.get("genres", ""),
+                    fallback_section_id=task.target_section_id,
+                    db=db,
+                )
                 book = Book(
                     open_library_id=best.get("open_library_id"),
                     title=best["title"],
@@ -155,7 +163,7 @@ def process_book_image(self, task_id: int):
                     publisher=best.get("publisher"),
                     page_count=best.get("page_count"),
                     language=best.get("language"),
-                    section_id=task.target_section_id,
+                    section_id=section_id,
                     added_by=task.user_id,
                 )
                 db.add(book)
