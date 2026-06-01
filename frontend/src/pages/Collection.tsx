@@ -1,27 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, PlusCircle, Search, ChevronLeft, ChevronRight, PlusSquare } from 'lucide-react'
-import { getBooks, getSections, setDefaultSection } from '../api/client'
-import { useAuthStore } from '../store/authStore'
+import { BookOpen, PlusCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { getBooks, getSections } from '../api/client'
 import BookCard from '../components/BookCard'
 
 export default function Collection() {
   const navigate = useNavigate()
-  const { activeSection, setActiveSection } = useAuthStore()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [sectionFilter, setSectionFilter] = useState<number | null>(null)
-
-  const handleSectionClick = async (id: number | null) => {
-    setSectionFilter(id)
-    setPage(1)
-    if (id !== null) {
-      setActiveSection(id)
-      try { await setDefaultSection(id) } catch {}
-    }
-  }
 
   const { data: sections } = useQuery({
     queryKey: ['sections'],
@@ -78,40 +67,26 @@ export default function Collection() {
         </form>
 
         {/* Section tabs */}
-        <div className="flex gap-1.5 flex-wrap items-center">
+        <div className="flex gap-1.5 flex-wrap">
           <button
-            onClick={() => handleSectionClick(null)}
+            onClick={() => { setSectionFilter(null); setPage(1) }}
             className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
               sectionFilter === null ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             Tutti
           </button>
-          {sections?.map((s: { id: number; name: string }) => {
-            const isFiltered = sectionFilter === s.id
-            const isActive = s.id === activeSection
-            return (
-              <button
-                key={s.id}
-                onClick={() => handleSectionClick(s.id)}
-                title={isActive ? 'Sezione attiva per l\'inserimento' : 'Clicca per filtrare e impostare come sezione attiva'}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  isFiltered ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {isActive && (
-                  <PlusSquare size={13} className={isFiltered ? 'text-blue-200' : 'text-blue-500'} />
-                )}
-                {s.name}
-              </button>
-            )
-          })}
-          {activeSection && (
-            <span className="text-xs text-gray-400 ml-1">
-              <PlusSquare size={11} className="inline text-blue-400 mr-0.5" />
-              = sezione attiva per inserimento
-            </span>
-          )}
+          {sections?.map((s: { id: number; name: string }) => (
+            <button
+              key={s.id}
+              onClick={() => { setSectionFilter(s.id); setPage(1) }}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                sectionFilter === s.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
         </div>
       </div>
 

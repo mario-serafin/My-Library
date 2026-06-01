@@ -49,10 +49,9 @@ export const deleteSection = (id: number) => api.delete(`/api/sections/${id}`)
 export const getTasks = (params?: Record<string, unknown>) => api.get('/api/tasks', { params })
 export const getPendingCount = () => api.get('/api/tasks/pending-count')
 export const getTask = (id: number) => api.get(`/api/tasks/${id}`)
-export const uploadImage = (file: File, sectionId?: number) => {
+export const uploadImage = (file: File) => {
   const form = new FormData()
   form.append('file', file)
-  if (sectionId) form.append('section_id', String(sectionId))
   return api.post('/api/tasks/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export const retryTask = (id: number, title: string, author: string) =>

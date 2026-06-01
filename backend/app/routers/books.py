@@ -70,7 +70,6 @@ async def create_book(
         title=data.title,
         author=data.author or "",
         genres=data.genres or "",
-        fallback_section_id=data.section_id or current_user.default_section_id,
         db=db,
     )
     book_data = data.model_dump()

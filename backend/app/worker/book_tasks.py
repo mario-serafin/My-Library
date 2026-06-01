@@ -7,18 +7,14 @@ from app.config import settings
 from app.database import SyncSessionLocal
 from app.models.task import ProcessingTask, TaskStatus
 from app.models.book import Book
-from app.services.ocr import extract_title_author, GeminiRateLimitError, GeminiTransientError
+from app.services.ocr import extract_book_info, GeminiRateLimitError, GeminiTransientError
 from app.services.book_search import search_books_sync, is_high_confidence
 from app.services.section_assignment import assign_section_id
 
 logger = logging.getLogger(__name__)
 
-# Redis key that stores the unix timestamp until which Gemini is rate-limited.
-# When any worker hits a 429, it sets this key so ALL workers pause automatically.
 RATE_LIMIT_KEY = "gemini:rate_limited_until"
-
-# Max retries for transient (non-rate-limit) errors before giving up
-MAX_TRANSIENT_RETRIES = 6  # 60 + 120 + 240 + 480 + 960 + 1920 s ≈ 1 h total
+MAX_TRANSIENT_RETRIES = 6
 
 
 def _redis():
@@ -27,7 +23,6 @@ def _redis():
 
 
 def _circuit_wait() -> int:
-    """Return seconds remaining in rate-limit pause, or 0 if clear."""
     try:
         val = _redis().get(RATE_LIMIT_KEY)
         if val:
@@ -39,11 +34,10 @@ def _circuit_wait() -> int:
 
 
 def _set_circuit(seconds: int):
-    """Activate the rate-limit circuit breaker for `seconds` seconds."""
     try:
         until = time.time() + seconds
         _redis().setex(RATE_LIMIT_KEY, seconds + 60, str(until))
-        logger.warning("Gemini circuit breaker ON for %d s (all workers paused)", seconds)
+        logger.warning("Gemini circuit breaker ON for %d s", seconds)
     except Exception as e:
         logger.error("Could not set circuit breaker: %s", e)
 
@@ -55,21 +49,18 @@ def _set_circuit(seconds: int):
     max_retries=None,
 )
 def process_book_image(self, task_id: int):
-    # ── 1. Circuit-breaker check ──────────────────────────────────────────────
+    # ── Circuit-breaker check ──────────────────────────────────────────────────
     wait = _circuit_wait()
     if wait > 0:
         logger.info("Circuit breaker active, rescheduling task %d in %d s", task_id, wait)
         raise self.retry(countdown=wait + 5)
 
-    # ── 2. Load task ──────────────────────────────────────────────────────────
     db = SyncSessionLocal()
-    retry_kwargs = None          # set to dict when a retry is needed
-    unexpected_exc = None
+    retry_kwargs = None
 
     try:
         task = db.query(ProcessingTask).filter_by(id=task_id).first()
         if not task:
-            logger.warning("Task %d not found", task_id)
             return
 
         task.status = TaskStatus.processing
@@ -78,78 +69,65 @@ def process_book_image(self, task_id: int):
 
         image_path = os.path.join(settings.UPLOAD_DIR, task.image_filename or "")
 
-        # ── 3. OCR via Gemini ─────────────────────────────────────────────────
+        # ── Gemini: title + author + genres in one request ─────────────────────
         try:
-            title, author = extract_title_author(image_path)
-
+            ocr = extract_book_info(image_path)
         except GeminiRateLimitError as e:
             _set_circuit(e.retry_after)
             task.status = TaskStatus.pending
-            task.error_message = (
-                f"Gemini rate limit raggiunto. "
-                f"Ripresa automatica tra {e.retry_after} secondi."
-            )
+            task.error_message = f"Gemini rate limited. Ripresa automatica tra {e.retry_after}s…"
             db.commit()
             retry_kwargs = {"countdown": e.retry_after + 5}
-            return  # → finally → retry
-
+            return
         except GeminiTransientError as e:
-            attempt = self.request.retries          # 0-based
+            attempt = self.request.retries
             if attempt >= MAX_TRANSIENT_RETRIES:
                 task.status = TaskStatus.needs_attention
-                task.error_message = (
-                    f"Gemini non raggiungibile dopo {MAX_TRANSIENT_RETRIES} tentativi. "
-                    f"Controlla la connessione o la chiave API."
-                )
+                task.error_message = f"Gemini non raggiungibile dopo {MAX_TRANSIENT_RETRIES} tentativi."
                 db.commit()
                 return
-            countdown = min(60 * (2 ** attempt), 3600)   # 60, 120, 240, 480, 960, 1920
+            countdown = min(60 * (2 ** attempt), 3600)
             task.status = TaskStatus.pending
-            task.error_message = (
-                f"Errore temporaneo Gemini (tentativo {attempt + 1}/{MAX_TRANSIENT_RETRIES}). "
-                f"Ripresa automatica tra {countdown} secondi."
-            )
+            task.error_message = f"Errore temporaneo Gemini (tentativo {attempt + 1}/{MAX_TRANSIENT_RETRIES}). Ripresa tra {countdown}s."
             db.commit()
             retry_kwargs = {"exc": e, "countdown": countdown}
-            return  # → finally → retry
+            return
 
-        # ── 4. Store OCR result ───────────────────────────────────────────────
-        task.ocr_title = title
-        task.ocr_author = author
+        task.ocr_title = ocr.title
+        task.ocr_author = ocr.author
         db.commit()
 
-        if not title:
+        if not ocr.title:
             task.status = TaskStatus.needs_attention
             task.error_message = "Gemini non ha identificato il titolo dalla copertina."
             db.commit()
             return
 
-        # ── 5. OpenLibrary search ─────────────────────────────────────────────
-        candidates = search_books_sync(title=title, author=author, limit=10)
+        # ── OpenLibrary / Google Books ─────────────────────────────────────────
+        # Merge Gemini genres with OpenLibrary genres for better section matching
+        candidates = search_books_sync(title=ocr.title, author=ocr.author, limit=10)
         task.book_candidates = candidates
         db.commit()
 
         if not candidates:
             task.status = TaskStatus.needs_attention
-            task.error_message = "Nessun risultato su OpenLibrary. Verifica manualmente."
+            task.error_message = "Nessun risultato trovato. Verifica manualmente."
             db.commit()
             return
 
-        # ── 6. Auto-insert if confident ───────────────────────────────────────
         if is_high_confidence(candidates):
             best = candidates[0]
-            existing = db.query(Book).filter_by(
-                open_library_id=best.get("open_library_id")
-            ).first()
+            existing = db.query(Book).filter_by(open_library_id=best.get("open_library_id")).first()
             if existing:
                 task.book_id = existing.id
                 task.status = TaskStatus.completed
             else:
+                # Combine Gemini genres + OpenLibrary genres for richer matching
+                combined_genres = ", ".join(filter(None, [ocr.genres, best.get("genres", "")]))
                 section_id = assign_section_id(
-                    title=best.get("title", ""),
-                    author=best.get("author", ""),
-                    genres=best.get("genres", ""),
-                    fallback_section_id=task.target_section_id,
+                    title=best.get("title", ocr.title),
+                    author=best.get("author", ocr.author),
+                    genres=combined_genres,
                     db=db,
                 )
                 book = Book(
@@ -159,10 +137,11 @@ def process_book_image(self, task_id: int):
                     isbn=best.get("isbn"),
                     year=best.get("year"),
                     cover_url=best.get("cover_url"),
-                    genres=best.get("genres"),
+                    genres=combined_genres,
                     publisher=best.get("publisher"),
                     page_count=best.get("page_count"),
                     language=best.get("language"),
+                    description=best.get("description"),
                     section_id=section_id,
                     added_by=task.user_id,
                 )
@@ -177,7 +156,6 @@ def process_book_image(self, task_id: int):
 
     except Exception as exc:
         logger.exception("Unexpected error in task %d: %s", task_id, exc)
-        unexpected_exc = exc
         db.rollback()
         try:
             t = db.query(ProcessingTask).filter_by(id=task_id).first()
@@ -191,6 +169,5 @@ def process_book_image(self, task_id: int):
     finally:
         db.close()
 
-    # Raise retry AFTER db is closed so the session is clean
     if retry_kwargs is not None:
         raise self.retry(**retry_kwargs)

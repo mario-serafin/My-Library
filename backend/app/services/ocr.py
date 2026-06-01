@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import Tuple
+from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +19,20 @@ except ImportError:
     PIL_AVAILABLE = False
 
 
+class BookOCR(NamedTuple):
+    title: str
+    author: str
+    genres: str  # comma-separated, ready for section_assignment
+
+
 class GeminiRateLimitError(Exception):
-    """429 / RESOURCE_EXHAUSTED — rate limit hit, caller must back off."""
     def __init__(self, retry_after: int = 65):
         self.retry_after = retry_after
         super().__init__(f"Gemini rate limited, retry after {retry_after}s")
 
 
 class GeminiTransientError(Exception):
-    """Temporary error (network, timeout, 5xx) — safe to retry with backoff."""
+    pass
 
 
 def _parse_retry_after(exc) -> int:
@@ -58,13 +63,13 @@ def _is_transient(exc) -> bool:
     return any(k in msg for k in ("503", "504", "500", "timeout", "unavailable"))
 
 
-def extract_title_author(image_path: str) -> Tuple[str, str]:
+def extract_book_info(image_path: str) -> BookOCR:
     """
-    Extract (title, author) from a book cover image via Gemini Vision.
+    Extract title, author AND genres from a book cover in a single Gemini request.
 
     Raises:
-        GeminiRateLimitError  — caller should pause and retry after retry_after seconds
-        GeminiTransientError  — caller should retry with exponential backoff
+        GeminiRateLimitError  — caller should pause and retry
+        GeminiTransientError  — caller should retry with backoff
     """
     from app.config import settings
 
@@ -85,34 +90,38 @@ def extract_title_author(image_path: str) -> Tuple[str, str]:
         img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
 
     prompt = (
-        "This is a book cover image. Identify the book TITLE and the AUTHOR name.\n"
-        "Rules:\n"
-        "- The title is the largest/most prominent text on the cover.\n"
-        "- The author is usually smaller text, often at the top or bottom.\n"
-        "- Ignore subtitles, edition info, publisher names, and series names.\n"
-        "- Return ONLY valid JSON: {\"title\": \"...\", \"author\": \"...\"}\n"
-        "- If you cannot identify one of the fields, use an empty string.\n"
-        "- Never add explanation outside the JSON."
+        "This is a book cover. Extract the following information:\n"
+        "1. TITLE — the main title (largest/most prominent text).\n"
+        "2. AUTHOR — the author name (usually smaller, top or bottom).\n"
+        "3. GENRES — 1 to 3 literary genres that best describe this book "
+        "(e.g. 'Fantasy', 'Thriller', 'Historical Fiction', 'Romance', 'Horror', "
+        "'Children's Fiction', 'Young Adult', 'Comics', 'Science Fiction').\n"
+        "   Infer genres from cover art, style and any visible text — not just explicit labels.\n\n"
+        "Return ONLY valid JSON, no explanation:\n"
+        "{\"title\": \"...\", \"author\": \"...\", \"genres\": [\"...\", \"...\"]}\n"
+        "Use empty string for unknown fields and empty array if genres cannot be inferred."
     )
 
     try:
         response = model.generate_content([prompt, img])
         text = response.text.strip()
-        match = re.search(r'\{[^{}]+\}', text, re.DOTALL)
+        match = re.search(r'\{.*?\}', text, re.DOTALL)
         if match:
             data = json.loads(match.group())
             title = str(data.get("title", "")).strip()
             author = str(data.get("author", "")).strip()
-            logger.info("Gemini → title=%r author=%r", title, author)
-            return title, author
-        return "", ""
+            raw_genres = data.get("genres", [])
+            if isinstance(raw_genres, str):
+                raw_genres = [g.strip() for g in raw_genres.split(",") if g.strip()]
+            genres = ", ".join(g for g in raw_genres if g)
+            logger.info("Gemini OCR → title=%r author=%r genres=%r", title, author, genres)
+            return BookOCR(title=title, author=author, genres=genres)
+        return BookOCR(title="", author="", genres="")
 
     except Exception as exc:
         if _is_rate_limit(exc):
-            logger.warning("Gemini rate limited: %s", exc)
             raise GeminiRateLimitError(_parse_retry_after(exc)) from exc
         if _is_transient(exc):
-            logger.warning("Gemini transient error: %s", exc)
             raise GeminiTransientError(str(exc)) from exc
         logger.warning("Gemini unknown error: %s", exc)
         raise GeminiTransientError(str(exc)) from exc

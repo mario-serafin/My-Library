@@ -9,6 +9,8 @@ import re
 logger = logging.getLogger(__name__)
 
 # Fixed sections with their seed data and recognition keywords
+FALLBACK_SECTION_NAME = "Senza Genere"
+
 DEFAULT_SECTIONS: list[dict] = [
     {
         "name": "Fumetti e Graphic Novel",
@@ -112,6 +114,12 @@ DEFAULT_SECTIONS: list[dict] = [
             "short stories", "novel", "narrativa", "letteratura",
         ],
     },
+    {
+        "name": FALLBACK_SECTION_NAME,
+        "description": "Libri il cui genere non è stato riconosciuto automaticamente",
+        "genres": "",
+        "keywords": [],  # never matched by keyword — only used as fallback
+    },
 ]
 
 # Build lookup: name → keywords (compiled for fast matching)
@@ -145,12 +153,11 @@ def assign_section_id(
     title: str,
     author: str,
     genres: str,
-    fallback_section_id: int | None,
     db,  # sync SQLAlchemy session
 ) -> int | None:
     """
-    Detect the best section from book metadata.
-    Falls back to `fallback_section_id` if no match found.
+    Return the ID of the best-matching section for a book.
+    Falls back to FALLBACK_SECTION_NAME ("Senza Genere") when no keyword matches.
     """
     from app.models.section import Section as SectionModel
     name = detect_section_name(title=title, author=author, genres=genres)
@@ -158,14 +165,14 @@ def assign_section_id(
         row = db.query(SectionModel).filter_by(name=name).first()
         if row:
             return row.id
-    return fallback_section_id
+    fallback = db.query(SectionModel).filter_by(name=FALLBACK_SECTION_NAME).first()
+    return fallback.id if fallback else None
 
 
 async def assign_section_id_async(
     title: str,
     author: str,
     genres: str,
-    fallback_section_id: int | None,
     db,  # async SQLAlchemy session
 ) -> int | None:
     """Async version for use in FastAPI routers."""
@@ -177,4 +184,6 @@ async def assign_section_id_async(
         row = result.scalar_one_or_none()
         if row:
             return row.id
-    return fallback_section_id
+    result = await db.execute(select(SectionModel).where(SectionModel.name == FALLBACK_SECTION_NAME))
+    fallback = result.scalar_one_or_none()
+    return fallback.id if fallback else None

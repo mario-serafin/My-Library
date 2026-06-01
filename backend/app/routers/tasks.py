@@ -67,7 +67,6 @@ async def list_tasks(
 @router.post("/upload", response_model=TaskResponse, status_code=202)
 async def upload_image(
     file: UploadFile = File(...),
-    section_id: Optional[int] = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -88,7 +87,6 @@ async def upload_image(
     task = ProcessingTask(
         user_id=current_user.id,
         image_filename=filename,
-        target_section_id=section_id or current_user.default_section_id,
         status=TaskStatus.pending,
     )
     db.add(task)
@@ -159,7 +157,13 @@ async def confirm_task(
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Book already in collection")
 
-    section_id = req.section_id or task.target_section_id or current_user.default_section_id
+    from app.services.section_assignment import assign_section_id_async
+    section_id = await assign_section_id_async(
+        title=req.title,
+        author=req.author or "",
+        genres=req.genres or "",
+        db=db,
+    )
     book = Book(
         open_library_id=req.open_library_id,
         title=req.title,
