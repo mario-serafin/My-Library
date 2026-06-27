@@ -22,7 +22,8 @@ except ImportError:
 class BookOCR(NamedTuple):
     title: str
     author: str
-    genres: str  # comma-separated, ready for section_assignment
+    genres: str    # comma-separated
+    section: str   # exact section name as chosen by Gemini, or ""
 
 
 class GeminiRateLimitError(Exception):
@@ -89,17 +90,25 @@ def extract_book_info(image_path: str) -> BookOCR:
         ratio = 1024 / max(w, h)
         img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
 
+    from app.services.section_assignment import DEFAULT_SECTIONS, FALLBACK_SECTION_NAME
+    sections_list = "\n".join(
+        f'  - "{s["name"]}": {s["description"]}'
+        for s in DEFAULT_SECTIONS
+    )
+
     prompt = (
         "This is a book cover. Extract the following information:\n"
         "1. TITLE — the main title (largest/most prominent text).\n"
         "2. AUTHOR — the author name (usually smaller, top or bottom).\n"
         "3. GENRES — 1 to 3 literary genres that best describe this book "
-        "(e.g. 'Fantasy', 'Thriller', 'Historical Fiction', 'Romance', 'Horror', "
-        "'Children's Fiction', 'Young Adult', 'Comics', 'Science Fiction').\n"
-        "   Infer genres from cover art, style and any visible text — not just explicit labels.\n\n"
+        "(e.g. 'Fantasy', 'Thriller', 'Historical Fiction'). "
+        "Infer genres from cover art, style and any visible text.\n"
+        "4. SECTION — choose the single most appropriate section from this list:\n"
+        f"{sections_list}\n"
+        f'   Use "{FALLBACK_SECTION_NAME}" if the genre cannot be determined.\n\n'
         "Return ONLY valid JSON, no explanation:\n"
-        "{\"title\": \"...\", \"author\": \"...\", \"genres\": [\"...\", \"...\"]}\n"
-        "Use empty string for unknown fields and empty array if genres cannot be inferred."
+        '{"title": "...", "author": "...", "genres": ["..."], "section": "..."}\n'
+        "The section value must be copied exactly as written in the list above."
     )
 
     try:
@@ -114,9 +123,10 @@ def extract_book_info(image_path: str) -> BookOCR:
             if isinstance(raw_genres, str):
                 raw_genres = [g.strip() for g in raw_genres.split(",") if g.strip()]
             genres = ", ".join(g for g in raw_genres if g)
-            logger.info("Gemini OCR → title=%r author=%r genres=%r", title, author, genres)
-            return BookOCR(title=title, author=author, genres=genres)
-        return BookOCR(title="", author="", genres="")
+            section = str(data.get("section", "")).strip()
+            logger.info("Gemini OCR → title=%r author=%r genres=%r section=%r", title, author, genres, section)
+            return BookOCR(title=title, author=author, genres=genres, section=section)
+        return BookOCR(title="", author="", genres="", section="")
 
     except Exception as exc:
         if _is_rate_limit(exc):

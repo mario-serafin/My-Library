@@ -3,6 +3,7 @@ version: '3.8'
 services:
   db:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: library
       POSTGRES_PASSWORD: library
@@ -17,6 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: redis-server --save 60 1 --loglevel warning
     volumes:
       - ${REDIS_DATA_DIR:-./data/redis}:/data
@@ -30,6 +32,7 @@ services:
     build:
       context: ./backend
       network: host
+    restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - DATABASE_URL=postgresql+asyncpg://library:library@db:5432/library
@@ -54,6 +57,7 @@ services:
     build:
       context: ./backend
       network: host
+    restart: unless-stopped
     command: celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q book_processing
     environment:
       - DATABASE_URL=postgresql+asyncpg://library:library@db:5432/library
@@ -76,6 +80,7 @@ services:
     build:
       context: ./frontend
       network: host
+    restart: unless-stopped
     ports:
       - "${PORT:-80}:80"
     depends_on:

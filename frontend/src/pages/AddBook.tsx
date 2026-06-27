@@ -19,8 +19,6 @@ export default function AddBook() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [uploadDone, setUploadDone] = useState(false)
 
   // Search tab
   const [title, setTitle] = useState('')
@@ -54,25 +52,24 @@ export default function AddBook() {
     if (!file) return
     setSelectedFile(file)
     setPreview(URL.createObjectURL(file))
-    setUploadDone(false)
   }
 
-  const handleUpload = async () => {
+  const handleUpload = () => {
     if (!selectedFile) return
-    setUploading(true)
-    try {
-      await uploadImage(selectedFile)
-      setUploadDone(true)
-      setPreview(null)
-      setSelectedFile(null)
-      if (fileRef.current) fileRef.current.value = ''
-      qc.invalidateQueries({ queryKey: ['pending-count'] })
-      toast.success('Foto in elaborazione!')
-    } catch {
-      toast.error('Errore durante il caricamento')
-    } finally {
-      setUploading(false)
-    }
+    const file = selectedFile
+
+    // Reset UI immediately — user can load the next photo right away
+    setPreview(null)
+    setSelectedFile(null)
+    if (fileRef.current) fileRef.current.value = ''
+
+    // Upload runs in background
+    uploadImage(file)
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ['pending-count'] })
+        toast.success('Foto inviata! Verrà elaborata a breve.')
+      })
+      .catch(() => toast.error('Errore durante il caricamento — riprova.'))
   }
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -115,19 +112,7 @@ export default function AddBook() {
       {/* ── PHOTO TAB ── */}
       {tab === 'photo' && (
         <div className="space-y-4">
-          {uploadDone ? (
-            <div className="card p-8 text-center">
-              <CheckCircle size={48} className="mx-auto text-green-500 mb-3" />
-              <h3 className="font-semibold text-gray-900 mb-1">Foto inviata!</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Il libro verrà riconosciuto e inserito automaticamente nella sezione corretta.
-                Controlla la pagina Task per i risultati.
-              </p>
-              <button onClick={() => setUploadDone(false)} className="btn-primary">
-                <Camera size={16} /> Aggiungi un altro
-              </button>
-            </div>
-          ) : preview ? (
+          {preview ? (
             <div className="card overflow-hidden">
               <img src={preview} alt="Anteprima" className="w-full max-h-72 object-contain bg-gray-50" />
               <div className="p-4 flex gap-2">
@@ -137,9 +122,8 @@ export default function AddBook() {
                 >
                   Riprendi
                 </button>
-                <button onClick={handleUpload} disabled={uploading} className="btn-primary flex-1">
-                  {uploading ? 'Caricamento…' : 'Elabora foto'}
-                  {!uploading && <ArrowRight size={16} />}
+                <button onClick={handleUpload} className="btn-primary flex-1">
+                  Elabora foto <ArrowRight size={16} />
                 </button>
               </div>
             </div>

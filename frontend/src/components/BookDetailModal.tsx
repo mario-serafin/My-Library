@@ -63,7 +63,7 @@ export default function BookDetailModal({ book, onClose }: Props) {
       className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col relative">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -167,34 +167,12 @@ export default function BookDetailModal({ book, onClose }: Props) {
             </div>
           )}
 
-          {/* Move to section */}
-          {movingTo && sections && (
-            <div className="px-6 pb-4">
-              <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Sposta in sezione</h4>
-              <div className="flex flex-wrap gap-2">
-                {sections.map((s: { id: number; name: string }) => (
-                  <button
-                    key={s.id}
-                    onClick={() => moveMutation.mutate(s.id)}
-                    disabled={s.id === book.section_id}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      s.id === book.section_id
-                        ? 'bg-blue-600 text-white cursor-default'
-                        : 'bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-700'
-                    }`}
-                  >
-                    {s.id === book.section_id ? '✓ ' : ''}{s.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer actions */}
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
           <button
-            onClick={() => setMovingTo(!movingTo)}
+            onClick={() => setMovingTo(true)}
             className="btn-secondary text-sm"
           >
             <FolderInput size={15} /> Sposta sezione
@@ -209,6 +187,50 @@ export default function BookDetailModal({ book, onClose }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Section picker — bottom sheet */}
+      {movingTo && sections && (
+        <div
+          className="absolute inset-0 z-10 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
+          onClick={(e) => e.target === e.currentTarget && setMovingTo(false)}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/40 rounded-2xl" onClick={() => setMovingTo(false)} />
+
+          {/* Sheet */}
+          <div className="relative z-10 bg-white w-full sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="font-semibold text-gray-900">Sposta in sezione</h3>
+              <button onClick={() => setMovingTo(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-3">
+              {(sections as { id: number; name: string; description?: string }[]).map((s) => {
+                const isCurrent = s.id === book.section_id
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => { if (!isCurrent) moveMutation.mutate(s.id) }}
+                    disabled={isCurrent || moveMutation.isPending}
+                    className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl mb-1 transition-colors ${
+                      isCurrent
+                        ? 'bg-blue-50 text-blue-700 cursor-default'
+                        : 'hover:bg-gray-50 text-gray-800 active:bg-gray-100'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{s.name}</p>
+                      {s.description && <p className="text-xs text-gray-400 truncate">{s.description}</p>}
+                    </div>
+                    {isCurrent && <span className="text-blue-500 text-xs font-semibold flex-shrink-0">Attuale</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

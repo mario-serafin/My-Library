@@ -14,6 +14,22 @@ from app.services.section_assignment import assign_section_id
 logger = logging.getLogger(__name__)
 
 RATE_LIMIT_KEY = "gemini:rate_limited_until"
+
+
+def _resolve_section(gemini_section: str, title: str, author: str, genres: str, db) -> int | None:
+    """
+    1. Trust Gemini's section name if it matches a known section exactly.
+    2. Fall back to keyword-based assignment.
+    3. Final fallback: "Senza Genere".
+    """
+    from app.models.section import Section as SectionModel
+    if gemini_section:
+        row = db.query(SectionModel).filter_by(name=gemini_section).first()
+        if row:
+            logger.info("Section from Gemini: %r", gemini_section)
+            return row.id
+        logger.warning("Gemini returned unknown section %r, falling back to keywords", gemini_section)
+    return assign_section_id(title=title, author=author, genres=genres, db=db)
 MAX_TRANSIENT_RETRIES = 6
 
 
@@ -122,14 +138,9 @@ def process_book_image(self, task_id: int):
                 task.book_id = existing.id
                 task.status = TaskStatus.completed
             else:
-                # Combine Gemini genres + OpenLibrary genres for richer matching
                 combined_genres = ", ".join(filter(None, [ocr.genres, best.get("genres", "")]))
-                section_id = assign_section_id(
-                    title=best.get("title", ocr.title),
-                    author=best.get("author", ocr.author),
-                    genres=combined_genres,
-                    db=db,
-                )
+                section_id = _resolve_section(ocr.section, best.get("title", ocr.title),
+                                              best.get("author", ocr.author), combined_genres, db)
                 book = Book(
                     open_library_id=best.get("open_library_id"),
                     title=best["title"],
