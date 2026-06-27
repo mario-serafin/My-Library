@@ -2,6 +2,8 @@ import logging
 from difflib import SequenceMatcher
 import httpx
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 OPENLIBRARY_SEARCH = "https://openlibrary.org/search.json"
