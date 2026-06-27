@@ -6,7 +6,9 @@ logger = logging.getLogger(__name__)
 
 OPENLIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPENLIBRARY_COVER = "https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
+OPENLIBRARY_COVER_L = "https://covers.openlibrary.org/b/id/{cover_id}-L.jpg"
 OL_FIELDS = "key,title,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median,language"
+OL_COVER_FIELDS = "title,language,cover_i,edition_key,first_publish_year"
 
 GOOGLE_BOOKS_SEARCH = "https://www.googleapis.com/books/v1/volumes"
 
@@ -193,3 +195,116 @@ def search_books_sync(title: str = "", author: str = "", limit: int = 15) -> lis
         logger.info("OpenLibrary returned nothing, trying Google Books (sync)")
         results = search_google_books_sync(title=title, author=author, limit=limit)
     return results
+
+
+# ── Cover search (many editions / languages) ────────────────────────────────────
+
+# ISO 639-1 → human label, for the few languages most relevant here
+_LANG_LABELS = {
+    "it": "Italiano", "en": "English", "fr": "Français", "de": "Deutsch",
+    "es": "Español", "pt": "Português", "nl": "Nederlands", "sv": "Svenska",
+    "da": "Dansk", "no": "Norsk", "fi": "Suomi", "pl": "Polski", "ru": "Русский",
+    "ja": "日本語", "zh": "中文",
+}
+
+
+def _lang_label(code: str | None) -> str | None:
+    if not code:
+        return None
+    return _LANG_LABELS.get(code.lower(), code.upper())
+
+
+def _clean_gb_cover(url: str | None) -> str | None:
+    if not url:
+        return None
+    return url.replace("http://", "https://").replace("&edge=curl", "").replace("edge=curl", "")
+
+
+async def _covers_from_google(client, title: str, author: str, isbn: str) -> list[dict]:
+    queries = []
+    if isbn:
+        queries.append(f"isbn:{isbn}")
+    if title:
+        q = f"intitle:{title}"
+        if author:
+            q += f" inauthor:{author.split(',')[0]}"
+        queries.append(q)
+
+    covers: list[dict] = []
+    for q in queries:
+        params: dict = {"q": q, "maxResults": 40, "printType": "books"}
+        if settings.GOOGLE_BOOKS_API_KEY:
+            params["key"] = settings.GOOGLE_BOOKS_API_KEY
+        try:
+            resp = await client.get(GOOGLE_BOOKS_SEARCH, params=params)
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+        except Exception as e:
+            logger.warning("Google Books cover search error: %s", e)
+            continue
+        for it in items:
+            info = it.get("volumeInfo", {})
+            url = _clean_gb_cover(info.get("imageLinks", {}).get("thumbnail")
+                                  or info.get("imageLinks", {}).get("smallThumbnail"))
+            if url:
+                covers.append({
+                    "url": url,
+                    "source": "Google Books",
+                    "language": _lang_label(info.get("language")),
+                    "edition": info.get("publisher"),
+                })
+    return covers
+
+
+async def _covers_from_openlibrary(client, title: str, author: str, isbn: str) -> list[dict]:
+    params: dict = {"limit": 25, "fields": OL_COVER_FIELDS}
+    if title:
+        params["title"] = title
+    if author:
+        params["author"] = author
+    if isbn and not title:
+        params["isbn"] = isbn
+    if not params.get("title") and not params.get("isbn"):
+        return []
+    try:
+        resp = await client.get(OPENLIBRARY_SEARCH, params=params)
+        resp.raise_for_status()
+        docs = resp.json().get("docs", [])
+    except Exception as e:
+        logger.warning("OpenLibrary cover search error: %s", e)
+        return []
+
+    covers: list[dict] = []
+    for doc in docs:
+        cover_id = doc.get("cover_i")
+        if not cover_id:
+            continue
+        langs = doc.get("language") or []
+        covers.append({
+            "url": OPENLIBRARY_COVER_L.format(cover_id=cover_id),
+            "source": "OpenLibrary",
+            "language": _lang_label(langs[0][:2]) if langs else None,
+            "edition": str(doc.get("first_publish_year")) if doc.get("first_publish_year") else None,
+        })
+    return covers
+
+
+async def search_covers(title: str = "", author: str = "", isbn: str = "") -> list[dict]:
+    """
+    Aggregate cover candidates from Google Books and OpenLibrary,
+    spanning multiple editions and languages. Deduplicated by URL.
+    """
+    if not title and not isbn:
+        return []
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        gb = await _covers_from_google(client, title, author, isbn)
+        ol = await _covers_from_openlibrary(client, title, author, isbn)
+
+    seen = set()
+    result = []
+    for c in gb + ol:
+        if c["url"] in seen:
+            continue
+        seen.add(c["url"])
+        result.append(c)
+    return result

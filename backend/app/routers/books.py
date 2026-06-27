@@ -7,9 +7,12 @@ from sqlalchemy import select, func, or_
 from app.database import get_db
 from app.models.book import Book
 from app.models.user import User
-from app.schemas.book import BookCreate, BookUpdate, BookResponse, PaginatedBooks, BookSearchRequest, BookCandidate
+from app.schemas.book import (
+    BookCreate, BookUpdate, BookResponse, PaginatedBooks, BookSearchRequest,
+    BookCandidate, CoverSearchRequest, CoverCandidate,
+)
 from app.services.auth import get_current_user
-from app.services.book_search import search_books
+from app.services.book_search import search_books, search_covers
 from app.services.section_assignment import assign_section_id_async
 
 router = APIRouter(prefix="/api/books", tags=["books"])
@@ -48,11 +51,19 @@ async def list_books(
 
 
 @router.post("/search", response_model=List[BookCandidate])
-async def search_books(
+async def search_books_endpoint(
     req: BookSearchRequest,
     _: User = Depends(get_current_user),
 ):
     return await search_books(title=req.title, author=req.author, limit=15)
+
+
+@router.post("/covers", response_model=List[CoverCandidate])
+async def search_covers_endpoint(
+    req: CoverSearchRequest,
+    _: User = Depends(get_current_user),
+):
+    return await search_covers(title=req.title, author=req.author, isbn=req.isbn)
 
 
 @router.post("", response_model=BookResponse, status_code=201)
@@ -101,7 +112,10 @@ async def update_book(
     book = result.scalar_one_or_none()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    for field, val in data.model_dump(exclude_none=True).items():
+    # exclude_unset → only fields explicitly sent are touched.
+    # This lets partial updates (e.g. just section_id) coexist with full edits
+    # that intentionally clear a field to null.
+    for field, val in data.model_dump(exclude_unset=True).items():
         setattr(book, field, val)
     await db.commit()
     await db.refresh(book)

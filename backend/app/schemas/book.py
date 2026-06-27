@@ -44,6 +44,24 @@ class BookUpdate(BaseModel):
     year: Optional[int] = None
     isbn: Optional[str] = None
     genres: Optional[str] = None
+    description: Optional[str] = None
+    publisher: Optional[str] = None
+    page_count: Optional[int] = None
+    language: Optional[str] = None
+    cover_url: Optional[str] = None
+
+
+class CoverSearchRequest(BaseModel):
+    title: str = ""
+    author: str = ""
+    isbn: str = ""
+
+
+class CoverCandidate(BaseModel):
+    url: str
+    source: str
+    language: Optional[str] = None
+    edition: Optional[str] = None
 
 
 class BookResponse(BaseModel):

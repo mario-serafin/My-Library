@@ -35,6 +35,8 @@ export const getMe = () => api.get('/api/auth/me')
 export const getBooks = (params: Record<string, unknown>) => api.get('/api/books', { params })
 export const searchBooks = (title: string, author: string) =>
   api.post('/api/books/search', { title, author })
+export const searchCovers = (title: string, author: string, isbn: string) =>
+  api.post('/api/books/covers', { title, author, isbn })
 export const createBook = (data: Record<string, unknown>) => api.post('/api/books', data)
 export const updateBook = (id: number, data: Record<string, unknown>) => api.put(`/api/books/${id}`, data)
 export const deleteBook = (id: number) => api.delete(`/api/books/${id}`)
