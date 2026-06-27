@@ -9,82 +9,32 @@ All books are assigned to TARGET_SECTION.
 Duplicates (matched by ISBN or title+author) are skipped automatically.
 """
 import csv
-import re
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import httpx
 from app.database import SyncSessionLocal
 from app.models.book import Book
 from app.models.section import Section
 from app.models.user import User
 
 TARGET_SECTION = "Giallo, Thriller e Noir"
-OL_ISBN_API = "https://openlibrary.org/api/books"
-REQUEST_DELAY = 0.4   # seconds between OpenLibrary calls — stay well under rate limit
 
-
-# ── OpenLibrary helpers ────────────────────────────────────────────────────────
-
-def _ol_fetch_isbn(isbn: str) -> dict | None:
-    """Fetch rich book data from OpenLibrary Books API by ISBN."""
-    try:
-        resp = httpx.get(
-            OL_ISBN_API,
-            params={"bibkeys": f"ISBN:{isbn}", "format": "json", "jscmd": "data"},
-            timeout=12,
-        )
-        data = resp.json()
-        raw = data.get(f"ISBN:{isbn}")
-        if not raw:
-            return None
-
-        authors = [a.get("name", "") for a in raw.get("authors", [])]
-        publishers = [p.get("name", "") for p in raw.get("publishers", [])]
-        subjects = [s.get("name", s) if isinstance(s, dict) else s
-                    for s in raw.get("subjects", [])][:6]
-
-        publish_date = raw.get("publish_date", "")
-        year = None
-        if publish_date:
-            m = re.search(r"\d{4}", publish_date)
-            year = int(m.group()) if m else None
-
-        desc = raw.get("description")
-        if isinstance(desc, dict):
-            desc = desc.get("value")
-
-        cover = None
-        if "cover" in raw:
-            cover = raw["cover"].get("large") or raw["cover"].get("medium") or raw["cover"].get("small")
-
-        ol_id = None
-        if raw.get("works"):
-            ol_id = raw["works"][0]["key"].replace("/works/", "")
-
-        return {
-            "open_library_id": ol_id,
-            "title": raw.get("title", ""),
-            "author": ", ".join(a for a in authors if a),
-            "isbn": isbn,
-            "year": year,
-            "description": desc,
-            "cover_url": cover,
-            "genres": ", ".join(subjects),
-            "publisher": publishers[0] if publishers else None,
-            "page_count": raw.get("number_of_pages"),
-        }
-    except Exception as exc:
-        print(f"    ⚠ OpenLibrary error: {exc}")
-        return None
+# OpenLibrary cover images are served by URL with no API call required.
+# If the ISBN has no cover the URL returns a transparent 1×1 pixel — we handle that at display time.
+OL_COVER_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
 
 
 # ── CSV helpers ────────────────────────────────────────────────────────────────
 
 def _read_csv(path: str) -> list[dict]:
+    if not Path(path).exists():
+        raise FileNotFoundError(
+            f"File not found: {path}\n"
+            f"Copy the CSV into backend/scripts/ and re-run:\n"
+            f"  cp your-export.csv backend/scripts/jelu-export.csv"
+        )
     for enc in ("utf-8-sig", "utf-8", "latin-1"):
         try:
             with open(path, encoding=enc, errors="replace") as f:
@@ -93,7 +43,7 @@ def _read_csv(path: str) -> list[dict]:
             return rows
         except Exception:
             continue
-    raise RuntimeError(f"Cannot read {path}")
+    raise RuntimeError(f"Cannot decode {path} — try saving the file as UTF-8")
 
 
 def _best_isbn(row: dict) -> str:
@@ -153,39 +103,18 @@ def main(csv_path: str) -> None:
             skipped += 1
             continue
 
-        # Try OpenLibrary first
-        ol = None
-        if isbn:
-            ol = _ol_fetch_isbn(isbn)
-            time.sleep(REQUEST_DELAY)
-
-        if ol and ol.get("title"):
-            book = Book(
-                title=ol["title"],
-                author=ol.get("author") or author or None,
-                isbn=isbn or None,
-                year=ol.get("year"),
-                description=ol.get("description"),
-                cover_url=ol.get("cover_url"),
-                genres=ol.get("genres") or _csv_genres(row) or None,
-                publisher=ol.get("publisher") or publisher,
-                page_count=ol.get("page_count"),
-                open_library_id=ol.get("open_library_id"),
-                section_id=section.id,
-                added_by=admin_id,
-            )
-            source = "OpenLibrary"
-        else:
-            book = Book(
-                title=title,
-                author=author or None,
-                isbn=isbn or None,
-                publisher=publisher,
-                genres=_csv_genres(row) or None,
-                section_id=section.id,
-                added_by=admin_id,
-            )
-            source = "CSV"
+        cover_url = OL_COVER_URL.format(isbn=isbn) if isbn else None
+        book = Book(
+            title=title,
+            author=author or None,
+            isbn=isbn or None,
+            publisher=publisher,
+            genres=_csv_genres(row) or None,
+            cover_url=cover_url,
+            section_id=section.id,
+            added_by=admin_id,
+        )
+        source = "CSV"
 
         db.add(book)
         imported += 1

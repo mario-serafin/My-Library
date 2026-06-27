@@ -44,6 +44,7 @@ export const getSections = () => api.get('/api/sections')
 export const createSection = (data: Record<string, unknown>) => api.post('/api/sections', data)
 export const updateSection = (id: number, data: Record<string, unknown>) => api.put(`/api/sections/${id}`, data)
 export const deleteSection = (id: number) => api.delete(`/api/sections/${id}`)
+export const clearSection = (id: number) => api.delete(`/api/sections/${id}/books`)
 
 // ---- Tasks ----
 export const getTasks = (params?: Record<string, unknown>) => api.get('/api/tasks', { params })

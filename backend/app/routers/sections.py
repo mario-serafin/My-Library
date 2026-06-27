@@ -1,10 +1,11 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from app.database import get_db
 from app.models.section import Section
+from app.models.book import Book
 from app.models.user import User
 from app.schemas.section import SectionCreate, SectionUpdate, SectionResponse
 from app.services.auth import get_current_user
@@ -49,6 +50,27 @@ async def update_section(
     await db.commit()
     await db.refresh(section)
     return section
+
+
+@router.delete("/{section_id}/books", status_code=200)
+async def clear_section(
+    section_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Delete all books belonging to this section."""
+    result = await db.execute(select(Section).where(Section.id == section_id))
+    section = result.scalar_one_or_none()
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+    count_result = await db.execute(
+        select(Book).where(Book.section_id == section_id)
+    )
+    books = count_result.scalars().all()
+    count = len(books)
+    await db.execute(delete(Book).where(Book.section_id == section_id))
+    await db.commit()
+    return {"deleted": count}
 
 
 @router.delete("/{section_id}", status_code=204)
