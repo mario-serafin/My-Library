@@ -127,7 +127,7 @@ export default function Tasks() {
             const isDismissed = task.status === 'dismissed'
             const canReprocess =
               !!task.image_url &&
-              ['pending', 'needs_attention', 'failed'].includes(task.status)
+              ['pending', 'failed'].includes(task.status)
 
             return (
               <div
