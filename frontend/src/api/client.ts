@@ -62,6 +62,7 @@ export const retryTask = (id: number, title: string, author: string) =>
 export const confirmTask = (id: number, data: Record<string, unknown>) =>
   api.post(`/api/tasks/${id}/confirm`, data)
 export const dismissTask = (id: number) => api.post(`/api/tasks/${id}/dismiss`)
+export const reprocessTask = (id: number) => api.post(`/api/tasks/${id}/reprocess`)
 export const deleteTask = (id: number) => api.delete(`/api/tasks/${id}`)
 export const deleteAllDismissed = () => api.delete('/api/tasks')
 

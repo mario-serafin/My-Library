@@ -64,6 +64,16 @@ async def _seed_default_sections():
         await db.commit()
 
 
+def _clear_stale_ai_cooldowns():
+    """Wipe any leftover AI cooldown keys (e.g. the old multi-day stuck value)."""
+    try:
+        from app.services.ai_vision import clear_all_cooldowns
+        clear_all_cooldowns()
+        logger.info("Cleared stale AI cooldown keys")
+    except Exception as e:
+        logger.warning("Could not clear AI cooldowns: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -71,6 +81,7 @@ async def lifespan(app: FastAPI):
     await _migrate()
     await _create_default_admin()
     await _seed_default_sections()
+    _clear_stale_ai_cooldowns()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     yield
     await engine.dispose()

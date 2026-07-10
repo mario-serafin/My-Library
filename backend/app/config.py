@@ -13,6 +13,15 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "*"
     GEMINI_API_KEY: str = ""
     GOOGLE_BOOKS_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
+    # Fallback AI when Gemini is rate limited (needs an Anthropic API key
+    # from console.anthropic.com — the Claude Pro subscription alone is NOT enough)
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_MODEL: str = "claude-haiku-4-5-20251001"
+
+    # Hard cap for any AI rate-limit cooldown (seconds). Prevents absurd waits.
+    AI_MAX_COOLDOWN: int = 3600
 
     model_config = {"env_file": ".env"}
 

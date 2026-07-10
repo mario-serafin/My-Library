@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Clock, AlertCircle, CheckCircle, XCircle, Loader, Image, Trash2 } from 'lucide-react'
+import { Clock, AlertCircle, CheckCircle, XCircle, Loader, Image, Trash2, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { getTasks, deleteTask, deleteAllDismissed } from '../api/client'
+import { getTasks, deleteTask, deleteAllDismissed, reprocessTask } from '../api/client'
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   pending:          { label: 'In attesa',        color: 'bg-yellow-100 text-yellow-700', icon: <Clock size={13} /> },
@@ -56,6 +56,16 @@ export default function Tasks() {
       toast.success('Task ignorati eliminati')
       qc.invalidateQueries({ queryKey: ['tasks'] })
     },
+  })
+
+  const reprocessMutation = useMutation({
+    mutationFn: (id: number) => reprocessTask(id),
+    onSuccess: () => {
+      toast.success('Rielaborazione avviata')
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['pending-count'] })
+    },
+    onError: () => toast.error('Impossibile riavviare la rielaborazione'),
   })
 
   const tasks: Task[] = data?.items ?? []
@@ -115,6 +125,9 @@ export default function Tasks() {
             const meta = STATUS_META[task.status] ?? STATUS_META.pending
             const isActionable = task.status === 'needs_attention' || task.status === 'failed'
             const isDismissed = task.status === 'dismissed'
+            const canReprocess =
+              !!task.image_url &&
+              ['pending', 'needs_attention', 'failed'].includes(task.status)
 
             return (
               <div
@@ -170,9 +183,25 @@ export default function Tasks() {
                     <p className="text-xs text-gray-400">
                       {new Date(task.created_at).toLocaleDateString('it-IT')} {new Date(task.created_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                     </p>
-                    {isActionable && (
-                      <span className="text-xs text-blue-600 font-medium">Revisiona →</span>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {canReprocess && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            reprocessMutation.mutate(task.id)
+                          }}
+                          disabled={reprocessMutation.isPending}
+                          className="text-xs text-blue-600 font-medium flex items-center gap-1 hover:text-blue-800"
+                          title="Riprova con l'AI"
+                        >
+                          <RefreshCw size={12} className={reprocessMutation.isPending ? 'animate-spin' : ''} />
+                          Riprova
+                        </button>
+                      )}
+                      {isActionable && (
+                        <span className="text-xs text-gray-400 font-medium">Revisiona →</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

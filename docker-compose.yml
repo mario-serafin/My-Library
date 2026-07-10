@@ -44,6 +44,8 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-haiku-4-5-20251001}
     volumes:
       - ./backend:/app
       - ${UPLOADS_DIR:-./data/uploads}:/app/uploads
@@ -67,6 +69,8 @@ services:
       - UPLOAD_DIR=/app/uploads
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-haiku-4-5-20251001}
     volumes:
       - ./backend:/app
       - ${UPLOADS_DIR:-./data/uploads}:/app/uploads

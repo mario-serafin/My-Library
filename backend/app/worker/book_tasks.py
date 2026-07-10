@@ -1,36 +1,22 @@
 import logging
 import os
-import time
 
 from app.celery_app import celery_app
 from app.config import settings
 from app.database import SyncSessionLocal
 from app.models.task import ProcessingTask, TaskStatus
 from app.models.book import Book
-from app.services.ocr import extract_book_info, GeminiRateLimitError, GeminiTransientError
+from app.models.section import Section
+from app.services.ai_vision import (
+    extract_book_info, AllProvidersUnavailable, AIProviderError,
+)
 from app.services.book_search import search_books_sync, is_high_confidence
-from app.services.section_assignment import assign_section_id
+from app.services.section_assignment import resolve_section_id
 
 logger = logging.getLogger(__name__)
 
-RATE_LIMIT_KEY = "gemini:rate_limited_until"
-
-
-def _resolve_section(gemini_section: str, title: str, author: str, genres: str, db) -> int | None:
-    """
-    1. Trust Gemini's section name if it matches a known section exactly.
-    2. Fall back to keyword-based assignment.
-    3. Final fallback: "Senza Genere".
-    """
-    from app.models.section import Section as SectionModel
-    if gemini_section:
-        row = db.query(SectionModel).filter_by(name=gemini_section).first()
-        if row:
-            logger.info("Section from Gemini: %r", gemini_section)
-            return row.id
-        logger.warning("Gemini returned unknown section %r, falling back to keywords", gemini_section)
-    return assign_section_id(title=title, author=author, genres=genres, db=db)
-MAX_TRANSIENT_RETRIES = 6
+MAX_TRANSIENT_RETRIES = 6      # network/5xx retries before giving up
+TRANSIENT_KEY = "task:transient:{task_id}"
 
 
 def _redis():
@@ -38,24 +24,30 @@ def _redis():
     return _redis_lib.from_url(settings.REDIS_URL, decode_responses=True)
 
 
-def _circuit_wait() -> int:
+def _transient_count(task_id: int) -> int:
     try:
-        val = _redis().get(RATE_LIMIT_KEY)
-        if val:
-            remaining = float(val) - time.time()
-            return max(0, int(remaining))
+        v = _redis().get(TRANSIENT_KEY.format(task_id=task_id))
+        return int(v) if v else 0
+    except Exception:
+        return 0
+
+
+def _bump_transient(task_id: int) -> int:
+    try:
+        r = _redis()
+        key = TRANSIENT_KEY.format(task_id=task_id)
+        n = r.incr(key)
+        r.expire(key, 86400)
+        return n
+    except Exception:
+        return 1
+
+
+def _reset_transient(task_id: int):
+    try:
+        _redis().delete(TRANSIENT_KEY.format(task_id=task_id))
     except Exception:
         pass
-    return 0
-
-
-def _set_circuit(seconds: int):
-    try:
-        until = time.time() + seconds
-        _redis().setex(RATE_LIMIT_KEY, seconds + 60, str(until))
-        logger.warning("Gemini circuit breaker ON for %d s", seconds)
-    except Exception as e:
-        logger.error("Could not set circuit breaker: %s", e)
 
 
 @celery_app.task(
@@ -65,12 +57,6 @@ def _set_circuit(seconds: int):
     max_retries=None,
 )
 def process_book_image(self, task_id: int):
-    # ── Circuit-breaker check ──────────────────────────────────────────────────
-    wait = _circuit_wait()
-    if wait > 0:
-        logger.info("Circuit breaker active, rescheduling task %d in %d s", task_id, wait)
-        raise self.retry(countdown=wait + 5)
-
     db = SyncSessionLocal()
     retry_kwargs = None
 
@@ -84,50 +70,54 @@ def process_book_image(self, task_id: int):
         db.commit()
 
         image_path = os.path.join(settings.UPLOAD_DIR, task.image_filename or "")
+        section_names = [s.name for s in db.query(Section).order_by(Section.name).all()]
 
-        # ── Gemini: title + author + genres in one request ─────────────────────
+        # ── AI vision: Gemini → Claude fallback ────────────────────────────────
         try:
-            ocr = extract_book_info(image_path)
-        except GeminiRateLimitError as e:
-            _set_circuit(e.retry_after)
+            info = extract_book_info(image_path, section_names)
+        except AllProvidersUnavailable as e:
             task.status = TaskStatus.pending
-            task.error_message = f"Gemini rate limited. Ripresa automatica tra {e.retry_after}s…"
+            task.error_message = (
+                f"AI temporaneamente al limite. Ripresa automatica tra ~{e.retry_after}s "
+                f"(oppure premi «Riprova»)."
+            )
             db.commit()
             retry_kwargs = {"countdown": e.retry_after + 5}
             return
-        except GeminiTransientError as e:
-            attempt = self.request.retries
-            if attempt >= MAX_TRANSIENT_RETRIES:
+        except AIProviderError as e:
+            n = _bump_transient(task_id)
+            if n >= MAX_TRANSIENT_RETRIES:
                 task.status = TaskStatus.needs_attention
-                task.error_message = f"Gemini non raggiungibile dopo {MAX_TRANSIENT_RETRIES} tentativi."
+                task.error_message = f"AI non raggiungibile dopo {MAX_TRANSIENT_RETRIES} tentativi: {e}"
                 db.commit()
                 return
-            countdown = min(60 * (2 ** attempt), 3600)
+            countdown = min(30 * (2 ** (n - 1)), 1800)   # 30s,60s,120s… capped 30min
             task.status = TaskStatus.pending
-            task.error_message = f"Errore temporaneo Gemini (tentativo {attempt + 1}/{MAX_TRANSIENT_RETRIES}). Ripresa tra {countdown}s."
+            task.error_message = f"Errore AI temporaneo (tentativo {n}/{MAX_TRANSIENT_RETRIES}). Riprovo tra {countdown}s."
             db.commit()
-            retry_kwargs = {"exc": e, "countdown": countdown}
+            retry_kwargs = {"countdown": countdown}
             return
 
-        task.ocr_title = ocr.title
-        task.ocr_author = ocr.author
+        _reset_transient(task_id)
+
+        task.ocr_title = info.title
+        task.ocr_author = info.author
         db.commit()
 
-        if not ocr.title:
+        if not info.title:
             task.status = TaskStatus.needs_attention
-            task.error_message = "Gemini non ha identificato il titolo dalla copertina."
+            task.error_message = "L'AI non ha identificato il titolo dalla copertina."
             db.commit()
             return
 
-        # ── OpenLibrary / Google Books ─────────────────────────────────────────
-        # Merge Gemini genres with OpenLibrary genres for better section matching
-        candidates = search_books_sync(title=ocr.title, author=ocr.author, limit=10)
+        # ── Metadata lookup (OpenLibrary → Google Books) ───────────────────────
+        candidates = search_books_sync(title=info.title, author=info.author, limit=10)
         task.book_candidates = candidates
         db.commit()
 
         if not candidates:
             task.status = TaskStatus.needs_attention
-            task.error_message = "Nessun risultato trovato. Verifica manualmente."
+            task.error_message = "Nessun risultato trovato online. Verifica manualmente."
             db.commit()
             return
 
@@ -138,9 +128,14 @@ def process_book_image(self, task_id: int):
                 task.book_id = existing.id
                 task.status = TaskStatus.completed
             else:
-                combined_genres = ", ".join(filter(None, [ocr.genres, best.get("genres", "")]))
-                section_id = _resolve_section(ocr.section, best.get("title", ocr.title),
-                                              best.get("author", ocr.author), combined_genres, db)
+                combined_genres = ", ".join(filter(None, [info.genres, best.get("genres", "")]))
+                section_id = resolve_section_id(
+                    ai_section=info.section,
+                    title=best.get("title", info.title),
+                    author=best.get("author", info.author),
+                    genres=combined_genres,
+                    db=db,
+                )
                 book = Book(
                     open_library_id=best.get("open_library_id"),
                     title=best["title"],
@@ -176,7 +171,6 @@ def process_book_image(self, task_id: int):
                 db.commit()
         except Exception:
             pass
-
     finally:
         db.close()
 

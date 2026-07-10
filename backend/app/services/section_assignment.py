@@ -149,6 +149,42 @@ def detect_section_name(title: str = "", author: str = "", genres: str = "") -> 
     return None
 
 
+def resolve_section_id(
+    ai_section: str,
+    title: str,
+    author: str,
+    genres: str,
+    db,  # sync SQLAlchemy session
+) -> int | None:
+    """
+    Resolve a section, in priority order:
+      1. The section name suggested by the AI (exact match, else fuzzy ≥ 0.6).
+      2. Keyword matching on genres/title.
+      3. Fallback section "Senza Genere".
+    Matches against ALL sections in the DB, including user-created custom ones.
+    """
+    from difflib import SequenceMatcher
+    from app.models.section import Section as SectionModel
+
+    sections = db.query(SectionModel).all()
+    by_name = {s.name.lower().strip(): s for s in sections}
+
+    if ai_section:
+        key = ai_section.lower().strip()
+        if key in by_name:
+            return by_name[key].id
+        best, best_score = None, 0.0
+        for name, s in by_name.items():
+            score = SequenceMatcher(None, key, name).ratio()
+            if score > best_score:
+                best, best_score = s, score
+        if best and best_score >= 0.6:
+            logger.info("AI section %r fuzzy-matched to %r (%.2f)", ai_section, best.name, best_score)
+            return best.id
+
+    return assign_section_id(title=title, author=author, genres=genres, db=db)
+
+
 def assign_section_id(
     title: str,
     author: str,
@@ -156,7 +192,7 @@ def assign_section_id(
     db,  # sync SQLAlchemy session
 ) -> int | None:
     """
-    Return the ID of the best-matching section for a book.
+    Return the ID of the best-matching section for a book by keyword matching.
     Falls back to FALLBACK_SECTION_NAME ("Senza Genere") when no keyword matches.
     """
     from app.models.section import Section as SectionModel

@@ -138,6 +138,38 @@ async def retry_task(
     return {"candidates": candidates}
 
 
+@router.post("/{task_id}/reprocess", response_model=TaskResponse)
+async def reprocess_task(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-run the full AI pipeline on the uploaded image (clears AI cooldowns first)."""
+    result = await db.execute(
+        select(ProcessingTask).where(ProcessingTask.id == task_id, ProcessingTask.user_id == current_user.id)
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if not task.image_filename:
+        raise HTTPException(status_code=400, detail="Questo task non ha un'immagine da rielaborare")
+
+    from app.services.ai_vision import clear_all_cooldowns
+    clear_all_cooldowns()
+
+    task.status = TaskStatus.pending
+    task.error_message = None
+    await db.commit()
+
+    from app.worker.book_tasks import process_book_image
+    celery_task = process_book_image.apply_async(args=[task.id])
+    task.celery_task_id = celery_task.id
+    await db.commit()
+    await db.refresh(task)
+
+    return _task_to_response(task)
+
+
 @router.post("/{task_id}/confirm", response_model=TaskResponse)
 async def confirm_task(
     task_id: int,
