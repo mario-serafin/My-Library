@@ -11,7 +11,7 @@ from sqlalchemy import select, func
 from app.database import get_db
 from app.models.task import ProcessingTask, TaskStatus
 from app.models.book import Book
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.task import TaskResponse, TaskRetryRequest, TaskConfirmRequest, PaginatedTasks
 from app.schemas.book import BookCandidate
 from app.services.auth import get_current_user
@@ -28,11 +28,23 @@ def _task_to_response(task: ProcessingTask) -> TaskResponse:
     return resp
 
 
+def _visible_tasks(user: User):
+    """Condizione SQL sui task visibili all'utente.
+
+    Gli amministratori condividono un unico pool: vedono e gestiscono i task di
+    tutti gli utenti admin. Gli utenti normali vedono solo i propri.
+    """
+    if user.role == UserRole.admin:
+        admin_ids = select(User.id).where(User.role == UserRole.admin)
+        return ProcessingTask.user_id.in_(admin_ids)
+    return ProcessingTask.user_id == user.id
+
+
 @router.get("/pending-count")
 async def pending_count(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(
         select(func.count()).select_from(ProcessingTask).where(
-            ProcessingTask.user_id == current_user.id,
+            _visible_tasks(current_user),
             ProcessingTask.status == TaskStatus.needs_attention,
         )
     )
@@ -47,7 +59,7 @@ async def list_tasks(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = select(ProcessingTask).where(ProcessingTask.user_id == current_user.id)
+    query = select(ProcessingTask).where(_visible_tasks(current_user))
     if status:
         query = query.where(ProcessingTask.status == status)
 
@@ -105,7 +117,7 @@ async def upload_image(
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(
-        select(ProcessingTask).where(ProcessingTask.id == task_id, ProcessingTask.user_id == current_user.id)
+        select(ProcessingTask).where(ProcessingTask.id == task_id, _visible_tasks(current_user))
     )
     task = result.scalar_one_or_none()
     if not task:
@@ -121,7 +133,7 @@ async def retry_task(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(ProcessingTask).where(ProcessingTask.id == task_id, ProcessingTask.user_id == current_user.id)
+        select(ProcessingTask).where(ProcessingTask.id == task_id, _visible_tasks(current_user))
     )
     task = result.scalar_one_or_none()
     if not task:
@@ -146,7 +158,7 @@ async def reprocess_task(
 ):
     """Re-run the full AI pipeline on the uploaded image (clears AI cooldowns first)."""
     result = await db.execute(
-        select(ProcessingTask).where(ProcessingTask.id == task_id, ProcessingTask.user_id == current_user.id)
+        select(ProcessingTask).where(ProcessingTask.id == task_id, _visible_tasks(current_user))
     )
     task = result.scalar_one_or_none()
     if not task:
@@ -178,7 +190,7 @@ async def confirm_task(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(ProcessingTask).where(ProcessingTask.id == task_id, ProcessingTask.user_id == current_user.id)
+        select(ProcessingTask).where(ProcessingTask.id == task_id, _visible_tasks(current_user))
     )
     task = result.scalar_one_or_none()
     if not task:
@@ -229,7 +241,7 @@ async def dismiss_task(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(ProcessingTask).where(ProcessingTask.id == task_id, ProcessingTask.user_id == current_user.id)
+        select(ProcessingTask).where(ProcessingTask.id == task_id, _visible_tasks(current_user))
     )
     task = result.scalar_one_or_none()
     if not task:
@@ -248,7 +260,7 @@ async def delete_task(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(ProcessingTask).where(ProcessingTask.id == task_id, ProcessingTask.user_id == current_user.id)
+        select(ProcessingTask).where(ProcessingTask.id == task_id, _visible_tasks(current_user))
     )
     task = result.scalar_one_or_none()
     if not task:
@@ -267,10 +279,10 @@ async def delete_dismissed_tasks(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete all dismissed tasks (and their uploaded images) for the current user."""
+    """Delete all dismissed tasks (and their uploaded images) visible to the current user."""
     result = await db.execute(
         select(ProcessingTask).where(
-            ProcessingTask.user_id == current_user.id,
+            _visible_tasks(current_user),
             ProcessingTask.status == TaskStatus.dismissed,
         )
     )
