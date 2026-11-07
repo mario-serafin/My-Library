@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Text, Enum
-from sqlalchemy.sql import func
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Text, Enum, Boolean
+from sqlalchemy.sql import func, expression
 from app.database import Base
 
 
@@ -28,5 +28,7 @@ class ProcessingTask(Base):
     book_id = Column(Integer, ForeignKey("books.id", ondelete="SET NULL"), nullable=True)
     target_section_id = Column(Integer, ForeignKey("sections.id", ondelete="SET NULL"), nullable=True)
     error_message = Column(Text, nullable=True)
+    # True for tasks reopened by scripts/recover_lost_books.py, awaiting approval
+    recovered = Column(Boolean, nullable=False, default=False, server_default=expression.false(), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

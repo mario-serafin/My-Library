@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Clock, AlertCircle, CheckCircle, XCircle, Loader, Image, Trash2, RefreshCw } from 'lucide-react'
+import { Clock, AlertCircle, CheckCircle, XCircle, Loader, Image, Trash2, RefreshCw, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getTasks, deleteTask, deleteAllDismissed, reprocessTask } from '../api/client'
 
@@ -21,6 +21,7 @@ interface Task {
   ocr_author?: string
   image_url?: string
   error_message?: string
+  recovered?: boolean
   created_at: string
 }
 
@@ -161,6 +162,11 @@ export default function Tasks() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {task.recovered && (
+                        <span className="badge bg-violet-100 text-violet-700 flex items-center gap-1 whitespace-nowrap">
+                          <RotateCcw size={13} /> Recuperato
+                        </span>
+                      )}
                       <span className={`badge ${meta.color} flex items-center gap-1 whitespace-nowrap`}>
                         {meta.icon} {meta.label}
                       </span>

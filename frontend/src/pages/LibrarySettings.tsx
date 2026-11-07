@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, Check, X, Lock, Trash } from 'lucide-react'
+import { Plus, Edit2, Trash2, Check, X, Lock, Trash, Download, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { getSections, createSection, updateSection, deleteSection, clearSection } from '../api/client'
+import { getSections, createSection, updateSection, deleteSection, clearSection, exportLibrary, importLibrary } from '../api/client'
 
 interface Section {
   id: number
@@ -68,6 +68,98 @@ function ClearSectionModal({
             {isPending ? 'Eliminazione…' : 'Svuota sezione'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function BackupCard() {
+  const qc = useQueryClient()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [parsed, setParsed] = useState<{ name: string; data: { books?: unknown[]; sections?: unknown[] } } | null>(null)
+
+  const exportMutation = useMutation({
+    mutationFn: () => exportLibrary(),
+    onSuccess: (res) => {
+      const url = URL.createObjectURL(res.data as Blob)
+      const a = document.createElement('a')
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+      a.href = url
+      a.download = `my-library-${stamp}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success('Export completato')
+    },
+    onError: () => toast.error('Errore durante l\'export'),
+  })
+
+  const importMutation = useMutation({
+    mutationFn: (data: unknown) => importLibrary(data),
+    onSuccess: (res) => {
+      const r = res.data
+      toast.success(
+        `Import completato: ${r.books_created} libri aggiunti, ${r.books_skipped_duplicates} già presenti, ${r.sections_created} sezioni create`,
+        { duration: 7000 },
+      )
+      qc.invalidateQueries({ queryKey: ['books'] })
+      qc.invalidateQueries({ queryKey: ['sections'] })
+      setParsed(null)
+      if (fileRef.current) fileRef.current.value = ''
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      toast.error(typeof detail === 'string' ? detail : 'File non valido o errore durante l\'import')
+    },
+  })
+
+  const onFile = async (file?: File) => {
+    if (!file) return
+    try {
+      const data = JSON.parse(await file.text())
+      if (!data || !Array.isArray(data.books)) throw new Error('bad')
+      setParsed({ name: file.name, data })
+    } catch {
+      setParsed(null)
+      toast.error('Il file non è un JSON di export valido')
+    }
+  }
+
+  return (
+    <div className="card p-6">
+      <h2 className="text-lg font-semibold text-gray-800 mb-1">Backup della libreria</h2>
+      <p className="text-sm text-gray-500 mb-4">
+        Esporta tutti i libri e le sezioni in un file JSON. L'import è additivo: aggiunge i libri mancanti
+        e salta quelli già presenti (stesso ID OpenLibrary, ISBN o titolo+autore), senza cancellare nulla.
+      </p>
+
+      <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending} className="btn-primary">
+        <Download size={16} /> {exportMutation.isPending ? 'Preparazione…' : 'Scarica export JSON'}
+      </button>
+
+      <div className="border-t border-gray-100 mt-5 pt-4 space-y-3">
+        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+          <Upload size={15} /> Importa da file
+        </h3>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          onChange={(e) => onFile(e.target.files?.[0])}
+          className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+        />
+        {parsed && (
+          <div className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg p-3">
+            <p className="text-sm text-gray-700 min-w-0">
+              <span className="font-medium truncate">{parsed.name}</span>
+              <span className="text-gray-500"> — {parsed.data.books?.length ?? 0} libri, {parsed.data.sections?.length ?? 0} sezioni</span>
+            </p>
+            <button onClick={() => importMutation.mutate(parsed.data)} disabled={importMutation.isPending} className="btn-primary flex-shrink-0">
+              {importMutation.isPending ? 'Importazione…' : 'Importa'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -249,6 +341,8 @@ export default function LibrarySettings() {
           </button>
         </form>
       </div>
+
+      <BackupCard />
 
       {/* Confirmation modal */}
       {clearTarget && (

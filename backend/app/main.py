@@ -12,7 +12,7 @@ from app.database import engine, Base, async_session_maker
 from app.models import User, UserRole, Section
 from app.services.auth import get_password_hash
 from app.services.section_assignment import DEFAULT_SECTIONS
-from app.routers import auth, books, sections, tasks, users
+from app.routers import auth, books, sections, tasks, users, library
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,6 +24,10 @@ async def _migrate():
         await conn.execute(text(
             "ALTER TABLE sections ADD COLUMN IF NOT EXISTS "
             "is_system BOOLEAN NOT NULL DEFAULT false"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE processing_tasks ADD COLUMN IF NOT EXISTS "
+            "recovered BOOLEAN NOT NULL DEFAULT false"
         ))
 
 
@@ -103,5 +107,6 @@ app.include_router(books.router)
 app.include_router(sections.router)
 app.include_router(tasks.router)
 app.include_router(users.router)
+app.include_router(library.router)
 
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")

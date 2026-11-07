@@ -1,6 +1,8 @@
 import logging
 import os
 
+from sqlalchemy import func
+
 from app.celery_app import celery_app
 from app.config import settings
 from app.database import SyncSessionLocal
@@ -48,6 +50,32 @@ def _reset_transient(task_id: int):
         _redis().delete(TRANSIENT_KEY.format(task_id=task_id))
     except Exception:
         pass
+
+
+def _find_existing_book(db, candidate: dict):
+    """Duplicate check that never matches on NULL ids.
+
+    Google Books candidates have open_library_id=None; filtering on None would
+    produce `IS NULL` and match any unrelated book without an OL id.
+    """
+    ol_id = candidate.get("open_library_id")
+    if ol_id:
+        book = db.query(Book).filter(Book.open_library_id == ol_id).first()
+        if book:
+            return book
+    isbn = candidate.get("isbn")
+    if isbn:
+        book = db.query(Book).filter(Book.isbn == isbn).first()
+        if book:
+            return book
+    title = (candidate.get("title") or "").strip().lower()
+    author = (candidate.get("author") or "").strip().lower()
+    if title:
+        q = db.query(Book).filter(func.lower(Book.title) == title)
+        if author:
+            q = q.filter(func.lower(Book.author) == author)
+        return q.first()
+    return None
 
 
 @celery_app.task(
@@ -123,7 +151,7 @@ def process_book_image(self, task_id: int):
 
         if is_high_confidence(candidates):
             best = candidates[0]
-            existing = db.query(Book).filter_by(open_library_id=best.get("open_library_id")).first()
+            existing = _find_existing_book(db, best)
             if existing:
                 task.book_id = existing.id
                 task.status = TaskStatus.completed

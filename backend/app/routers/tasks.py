@@ -54,7 +54,7 @@ async def list_tasks(
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar()
 
-    query = query.order_by(ProcessingTask.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    query = query.order_by(ProcessingTask.recovered.desc(), ProcessingTask.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     items = [_task_to_response(t) for t in result.scalars().all()]
 
@@ -215,6 +215,7 @@ async def confirm_task(
 
     task.book_id = book.id
     task.status = TaskStatus.completed
+    task.recovered = False
     await db.commit()
     await db.refresh(task)
 
@@ -234,6 +235,7 @@ async def dismiss_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     task.status = TaskStatus.dismissed
+    task.recovered = False
     await db.commit()
     await db.refresh(task)
     return _task_to_response(task)

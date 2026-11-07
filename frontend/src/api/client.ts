@@ -41,6 +41,10 @@ export const createBook = (data: Record<string, unknown>) => api.post('/api/book
 export const updateBook = (id: number, data: Record<string, unknown>) => api.put(`/api/books/${id}`, data)
 export const deleteBook = (id: number) => api.delete(`/api/books/${id}`)
 
+// ---- Library backup ----
+export const exportLibrary = () => api.get('/api/library/export', { responseType: 'blob' })
+export const importLibrary = (data: unknown) => api.post('/api/library/import', data)
+
 // ---- Sections ----
 export const getSections = () => api.get('/api/sections')
 export const createSection = (data: Record<string, unknown>) => api.post('/api/sections', data)

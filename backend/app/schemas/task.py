@@ -19,6 +19,7 @@ class TaskResponse(BaseModel):
     book_id: Optional[int]
     target_section_id: Optional[int]
     error_message: Optional[str]
+    recovered: bool = False
     created_at: datetime
     updated_at: Optional[datetime]
 
