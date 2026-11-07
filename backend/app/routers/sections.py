@@ -42,7 +42,7 @@ async def update_section(
     result = await db.execute(select(Section).where(Section.id == section_id))
     section = result.scalar_one_or_none()
     if not section:
-        raise HTTPException(status_code=404, detail="Section not found")
+        raise HTTPException(status_code=404, detail="Sezione non trovata")
     if section.is_system:
         raise HTTPException(status_code=403, detail="Le sezioni di sistema non possono essere modificate")
     for field, val in data.model_dump(exclude_none=True).items():
@@ -62,7 +62,7 @@ async def clear_section(
     result = await db.execute(select(Section).where(Section.id == section_id))
     section = result.scalar_one_or_none()
     if not section:
-        raise HTTPException(status_code=404, detail="Section not found")
+        raise HTTPException(status_code=404, detail="Sezione non trovata")
     count_result = await db.execute(
         select(Book).where(Book.section_id == section_id)
     )
@@ -82,7 +82,7 @@ async def delete_section(
     result = await db.execute(select(Section).where(Section.id == section_id))
     section = result.scalar_one_or_none()
     if not section:
-        raise HTTPException(status_code=404, detail="Section not found")
+        raise HTTPException(status_code=404, detail="Sezione non trovata")
     if section.is_system:
         raise HTTPException(status_code=403, detail="Le sezioni di sistema non possono essere eliminate")
     await db.delete(section)

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, Check, X, Lock, Trash, Download, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getSections, createSection, updateSection, deleteSection, clearSection, exportLibrary, importLibrary } from '../api/client'
+import { errorMessage } from '../api/errors'
 
 interface Section {
   id: number
@@ -28,23 +29,23 @@ function ClearSectionModal({
   const [typed, setTyped] = useState('')
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+    <div className="modal-backdrop z-50">
+      <div className="modal-panel max-w-md p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
             <Trash size={18} className="text-red-600" />
           </div>
           <div>
-            <h2 className="font-semibold text-gray-900">Svuota sezione</h2>
-            <p className="text-sm text-gray-500">{section.name}</p>
+            <h2 className="font-serif text-xl font-semibold">Svuota sezione</h2>
+            <p className="text-sm text-stone-500">{section.name}</p>
           </div>
         </div>
 
-        <p className="text-sm text-gray-700 mb-2">
+        <p className="text-sm text-stone-700 mb-2">
           Questa operazione elimina <strong>tutti i libri</strong> contenuti nella sezione
           <strong> "{section.name}"</strong> in modo permanente.
         </p>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-stone-500 mb-4">
           Digita <span className="font-mono font-bold text-red-600">{CONFIRM_WORD}</span> per confermare:
         </p>
 
@@ -92,7 +93,7 @@ function BackupCard() {
       URL.revokeObjectURL(url)
       toast.success('Export completato')
     },
-    onError: () => toast.error('Errore durante l\'export'),
+    onError: (err) => toast.error(errorMessage(err, 'Errore durante l\'export')),
   })
 
   const importMutation = useMutation({
@@ -108,10 +109,7 @@ function BackupCard() {
       setParsed(null)
       if (fileRef.current) fileRef.current.value = ''
     },
-    onError: (err: unknown) => {
-      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-      toast.error(typeof detail === 'string' ? detail : 'File non valido o errore durante l\'import')
-    },
+    onError: (err) => toast.error(errorMessage(err, 'File non valido o errore durante l\'import')),
   })
 
   const onFile = async (file?: File) => {
@@ -128,8 +126,8 @@ function BackupCard() {
 
   return (
     <div className="card p-6">
-      <h2 className="text-lg font-semibold text-gray-800 mb-1">Backup della libreria</h2>
-      <p className="text-sm text-gray-500 mb-4">
+      <h2 className="font-serif text-xl font-semibold text-stone-900 mb-1">Backup della libreria</h2>
+      <p className="text-sm text-stone-500 mb-4">
         Esporta tutti i libri e le sezioni in un file JSON. L'import è additivo: aggiunge i libri mancanti
         e salta quelli già presenti (stesso ID OpenLibrary, ISBN o titolo+autore), senza cancellare nulla.
       </p>
@@ -138,8 +136,8 @@ function BackupCard() {
         <Download size={16} /> {exportMutation.isPending ? 'Preparazione…' : 'Scarica export JSON'}
       </button>
 
-      <div className="border-t border-gray-100 mt-5 pt-4 space-y-3">
-        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+      <div className="border-t border-stone-100 mt-5 pt-4 space-y-3">
+        <h3 className="text-sm font-medium text-stone-700 flex items-center gap-1.5">
           <Upload size={15} /> Importa da file
         </h3>
         <input
@@ -147,13 +145,13 @@ function BackupCard() {
           type="file"
           accept="application/json,.json"
           onChange={(e) => onFile(e.target.files?.[0])}
-          className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+          className="block w-full text-sm text-stone-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-brand-50 file:text-brand-700 file:font-medium hover:file:bg-brand-100"
         />
         {parsed && (
-          <div className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg p-3">
-            <p className="text-sm text-gray-700 min-w-0">
+          <div className="flex items-center justify-between gap-3 bg-stone-50 rounded-lg p-3">
+            <p className="text-sm text-stone-700 min-w-0">
               <span className="font-medium truncate">{parsed.name}</span>
-              <span className="text-gray-500"> — {parsed.data.books?.length ?? 0} libri, {parsed.data.sections?.length ?? 0} sezioni</span>
+              <span className="text-stone-500"> — {parsed.data.books?.length ?? 0} libri, {parsed.data.sections?.length ?? 0} sezioni</span>
             </p>
             <button onClick={() => importMutation.mutate(parsed.data)} disabled={importMutation.isPending} className="btn-primary flex-shrink-0">
               {importMutation.isPending ? 'Importazione…' : 'Importa'}
@@ -191,7 +189,7 @@ export default function LibrarySettings() {
       qc.invalidateQueries({ queryKey: ['sections'] })
       setNewName(''); setNewDesc(''); setNewGenres('')
     },
-    onError: () => toast.error('Errore durante la creazione'),
+    onError: (err) => toast.error(errorMessage(err, 'Errore durante la creazione')),
   })
 
   const updateMutation = useMutation({
@@ -201,7 +199,7 @@ export default function LibrarySettings() {
       qc.invalidateQueries({ queryKey: ['sections'] })
       setEditId(null)
     },
-    onError: () => toast.error('Errore durante l\'aggiornamento'),
+    onError: (err) => toast.error(errorMessage(err, 'Errore durante l\'aggiornamento')),
   })
 
   const deleteMutation = useMutation({
@@ -210,7 +208,7 @@ export default function LibrarySettings() {
       toast.success('Sezione eliminata')
       qc.invalidateQueries({ queryKey: ['sections'] })
     },
-    onError: () => toast.error('Impossibile eliminare la sezione'),
+    onError: (err) => toast.error(errorMessage(err, 'Impossibile eliminare la sezione')),
   })
 
   const clearMutation = useMutation({
@@ -222,7 +220,7 @@ export default function LibrarySettings() {
       qc.invalidateQueries({ queryKey: ['sections'] })
       setClearTarget(null)
     },
-    onError: () => toast.error('Errore durante lo svuotamento'),
+    onError: (err) => toast.error(errorMessage(err, 'Errore durante lo svuotamento')),
   })
 
   const startEdit = (s: Section) => {
@@ -231,7 +229,7 @@ export default function LibrarySettings() {
   }
 
   const SectionRow = ({ s, showClear }: { s: Section; showClear?: boolean }) => (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className="border border-stone-200 rounded-xl overflow-hidden bg-white">
       {editId === s.id ? (
         <div className="p-3 space-y-2">
           <input className="input text-sm" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nome sezione" />
@@ -249,27 +247,30 @@ export default function LibrarySettings() {
       ) : (
         <div className="flex items-center gap-3 p-3">
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-gray-900 text-sm">{s.name}</p>
-            {s.description && <p className="text-xs text-gray-500 truncate">{s.description}</p>}
+            <p className="font-medium text-stone-900 text-sm">{s.name}</p>
+            {s.description && <p className="text-xs text-stone-500 truncate">{s.description}</p>}
           </div>
           <div className="flex gap-1">
             {showClear && (
               <button
                 onClick={() => setClearTarget(s)}
-                className="p-1.5 text-gray-400 hover:text-orange-600 rounded hover:bg-orange-50"
+                className="icon-btn p-1.5 hover:text-orange-600 hover:bg-orange-50"
                 title="Svuota sezione"
+                aria-label="Svuota sezione"
               >
                 <Trash size={15} />
               </button>
             )}
             {!s.is_system && (
               <>
-                <button onClick={() => startEdit(s)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50">
+                <button onClick={() => startEdit(s)} className="icon-btn p-1.5 hover:text-brand-700 hover:bg-brand-50" title="Modifica sezione" aria-label="Modifica sezione">
                   <Edit2 size={15} />
                 </button>
                 <button
                   onClick={() => confirm(`Eliminare la sezione "${s.name}"?`) && deleteMutation.mutate(s.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
+                  className="icon-btn p-1.5 hover:text-red-600 hover:bg-red-50"
+                  title="Elimina sezione"
+                  aria-label="Elimina sezione"
                 >
                   <Trash2 size={15} />
                 </button>
@@ -283,22 +284,25 @@ export default function LibrarySettings() {
 
   return (
     <div className="max-w-xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Impostazioni Libreria</h1>
+      <div>
+        <h1 className="page-title">Impostazioni</h1>
+        <p className="page-subtitle">Sezioni della libreria e backup dei dati.</p>
+      </div>
 
       {/* System sections */}
       <div className="card p-6">
         <div className="flex items-center gap-2 mb-1">
-          <Lock size={15} className="text-gray-400" />
-          <h2 className="text-lg font-semibold text-gray-800">Sezioni fisse</h2>
+          <Lock size={15} className="text-stone-400" />
+          <h2 className="font-serif text-xl font-semibold text-stone-900">Sezioni fisse</h2>
         </div>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-stone-500 mb-4">
           Assegnate automaticamente in base ai generi. Non modificabili.
           Il pulsante <Trash size={12} className="inline text-orange-500 mx-0.5" /> svuota tutti i libri della sezione.
         </p>
 
         {isLoading ? (
           <div className="space-y-2">
-            {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />)}
+            {[1, 2, 3].map((i) => <div key={i} className="h-11 skeleton rounded-xl" />)}
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -311,13 +315,13 @@ export default function LibrarySettings() {
 
       {/* Custom sections */}
       <div className="card p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-1">Sezioni personalizzate</h2>
-        <p className="text-sm text-gray-500 mb-4">
+        <h2 className="font-serif text-xl font-semibold text-stone-900 mb-1">Sezioni personalizzate</h2>
+        <p className="text-sm text-stone-500 mb-4">
           Sezioni aggiuntive create manualmente.
         </p>
 
         {!isLoading && customSections.length === 0 && (
-          <p className="text-sm text-gray-400 italic mb-4">Nessuna sezione personalizzata ancora.</p>
+          <p className="text-sm text-stone-400 italic mb-4">Nessuna sezione personalizzata ancora.</p>
         )}
 
         {customSections.length > 0 && (
@@ -329,8 +333,8 @@ export default function LibrarySettings() {
         )}
 
         {/* Create */}
-        <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate() }} className="space-y-3 border-t border-gray-100 pt-4">
-          <h3 className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+        <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate() }} className="space-y-3 border-t border-stone-100 pt-4">
+          <h3 className="text-sm font-medium text-stone-700 flex items-center gap-1.5">
             <Plus size={15} /> Nuova sezione
           </h3>
           <input className="input text-sm" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome *" />

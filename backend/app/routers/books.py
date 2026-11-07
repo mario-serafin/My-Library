@@ -75,7 +75,7 @@ async def create_book(
     if data.open_library_id:
         existing = await db.execute(select(Book).where(Book.open_library_id == data.open_library_id))
         if existing.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="Book already in collection")
+            raise HTTPException(status_code=409, detail="Libro già presente nella collezione")
 
     section_id = await assign_section_id_async(
         title=data.title,
@@ -97,7 +97,7 @@ async def get_book(book_id: int, db: AsyncSession = Depends(get_db), _: User = D
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
+        raise HTTPException(status_code=404, detail="Libro non trovato")
     return book
 
 
@@ -111,7 +111,7 @@ async def update_book(
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
+        raise HTTPException(status_code=404, detail="Libro non trovato")
     # exclude_unset → only fields explicitly sent are touched.
     # This lets partial updates (e.g. just section_id) coexist with full edits
     # that intentionally clear a field to null.
@@ -127,6 +127,6 @@ async def delete_book(book_id: int, db: AsyncSession = Depends(get_db), _: User 
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
+        raise HTTPException(status_code=404, detail="Libro non trovato")
     await db.delete(book)
     await db.commit()

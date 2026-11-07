@@ -34,7 +34,7 @@ async def get_current_user(
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Sessione non valida o scaduta: effettua di nuovo l'accesso",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -54,5 +54,5 @@ async def get_current_user(
 
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operazione riservata agli amministratori")
     return current_user

@@ -71,7 +71,7 @@ async def upload_image(
     current_user: User = Depends(get_current_user),
 ):
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
+        raise HTTPException(status_code=400, detail="Il file deve essere un'immagine")
 
     ext = os.path.splitext(file.filename or "img.jpg")[1] or ".jpg"
     filename = f"{uuid.uuid4().hex}{ext}"
@@ -80,7 +80,7 @@ async def upload_image(
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     content = await file.read()
     if len(content) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large (max 20MB)")
+        raise HTTPException(status_code=413, detail="File troppo grande (massimo 20 MB)")
     with open(filepath, "wb") as f:
         f.write(content)
 
@@ -109,7 +109,7 @@ async def get_task(task_id: int, db: AsyncSession = Depends(get_db), current_use
     )
     task = result.scalar_one_or_none()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task non trovato")
     return _task_to_response(task)
 
 
@@ -125,7 +125,7 @@ async def retry_task(
     )
     task = result.scalar_one_or_none()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task non trovato")
 
     task.ocr_title = req.title
     task.ocr_author = req.author
@@ -150,7 +150,7 @@ async def reprocess_task(
     )
     task = result.scalar_one_or_none()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task non trovato")
     if not task.image_filename:
         raise HTTPException(status_code=400, detail="Questo task non ha un'immagine da rielaborare")
 
@@ -182,12 +182,12 @@ async def confirm_task(
     )
     task = result.scalar_one_or_none()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task non trovato")
 
     if req.open_library_id:
         existing = await db.execute(select(Book).where(Book.open_library_id == req.open_library_id))
         if existing.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="Book already in collection")
+            raise HTTPException(status_code=409, detail="Libro già presente nella collezione")
 
     from app.services.section_assignment import assign_section_id_async
     section_id = await assign_section_id_async(
@@ -233,7 +233,7 @@ async def dismiss_task(
     )
     task = result.scalar_one_or_none()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task non trovato")
     task.status = TaskStatus.dismissed
     task.recovered = False
     await db.commit()
@@ -252,7 +252,7 @@ async def delete_task(
     )
     task = result.scalar_one_or_none()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task non trovato")
     if task.image_filename:
         import os as _os
         path = _os.path.join(settings.UPLOAD_DIR, task.image_filename)

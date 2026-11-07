@@ -24,36 +24,45 @@ interface Props {
 
 export default function BookCard({ book }: Props) {
   const [open, setOpen] = useState(false)
+  const [broken, setBroken] = useState(false)
+  const showCover = book.cover_url && !broken
 
   return (
     <>
-      <div
+      <button
+        type="button"
         onClick={() => setOpen(true)}
-        className="card flex flex-col overflow-hidden hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
+        className="group flex flex-col text-left focus:outline-none"
       >
-        {/* Cover */}
-        <div className="aspect-[2/3] bg-gradient-to-br from-blue-50 to-indigo-100 relative overflow-hidden">
-          {book.cover_url ? (
+        {/* Copertina */}
+        <div className="aspect-[2/3] w-full rounded-xl overflow-hidden relative bg-gradient-to-br from-brand-50 to-stone-100 ring-1 ring-stone-900/5 shadow-soft transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-lift group-focus-visible:ring-2 group-focus-visible:ring-brand-500">
+          {showCover ? (
             <img
               src={book.cover_url}
-              alt={book.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              alt={`Copertina di ${book.title}`}
+              loading="lazy"
+              className="w-full h-full object-cover"
+              onError={() => setBroken(true)}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <BookOpen size={40} className="text-blue-300" />
+            <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-4 text-center">
+              <BookOpen size={32} className="text-brand-300" />
+              <span className="font-serif text-sm text-brand-800/70 line-clamp-3">{book.title}</span>
             </div>
           )}
+          {/* Riflesso sul dorso, effetto libro */}
+          <div className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-black/15 to-transparent pointer-events-none" />
         </div>
 
-        {/* Info */}
-        <div className="p-3 flex flex-col gap-0.5">
-          <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">{book.title}</h3>
-          {book.author && <p className="text-xs text-gray-500 line-clamp-1">{book.author}</p>}
-          {book.year && <p className="text-xs text-gray-400">{book.year}</p>}
+        {/* Informazioni */}
+        <div className="pt-3 flex flex-col gap-0.5">
+          <h3 className="font-semibold text-stone-900 text-sm leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
+            {book.title}
+          </h3>
+          {book.author && <p className="text-xs text-stone-500 line-clamp-1">{book.author}</p>}
+          {book.year && <p className="text-xs text-stone-400">{book.year}</p>}
         </div>
-      </div>
+      </button>
 
       {open && <BookDetailModal book={book} onClose={() => setOpen(false)} />}
     </>

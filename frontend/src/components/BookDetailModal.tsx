@@ -3,6 +3,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { X, BookOpen, Trash2, FolderInput, Pencil, Save, ImagePlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { deleteBook, updateBook, getSections } from '../api/client'
+import { errorMessage } from '../api/errors'
 import CoverPicker from './CoverPicker'
 
 interface Book {
@@ -76,7 +77,7 @@ export default function BookDetailModal({ book, onClose }: Props) {
       qc.invalidateQueries({ queryKey: ['books'] })
       onClose()
     },
-    onError: () => toast.error('Errore durante la rimozione'),
+    onError: (err) => toast.error(errorMessage(err, 'Errore durante la rimozione')),
   })
 
   const moveMutation = useMutation({
@@ -86,6 +87,7 @@ export default function BookDetailModal({ book, onClose }: Props) {
       qc.invalidateQueries({ queryKey: ['books'] })
       setMovingTo(false)
     },
+    onError: (err) => toast.error(errorMessage(err, 'Impossibile spostare il libro')),
   })
 
   const saveMutation = useMutation({
@@ -107,7 +109,7 @@ export default function BookDetailModal({ book, onClose }: Props) {
       qc.invalidateQueries({ queryKey: ['books'] })
       setEditing(false)
     },
-    onError: () => toast.error('Errore durante il salvataggio'),
+    onError: (err) => toast.error(errorMessage(err, 'Errore durante il salvataggio')),
   })
 
   const genres = (editing ? form.genres : book.genres)
@@ -126,27 +128,28 @@ export default function BookDetailModal({ book, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+      className="modal-backdrop z-50"
       onClick={(e) => e.target === e.currentTarget && !editing && onClose()}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col relative">
+      <div className="modal-panel max-w-2xl max-h-[90vh] overflow-hidden flex flex-col relative">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-800 truncate pr-4">
-            {editing ? 'Modifica libro' : book.title}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+          <h2 className="font-medium text-sm text-stone-500 truncate pr-4">
+            {editing ? 'Modifica libro' : 'Dettagli libro'}
           </h2>
           <div className="flex items-center gap-1 flex-shrink-0">
             {!editing && (
               <button
                 onClick={() => setEditing(true)}
-                className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50"
+                className="icon-btn hover:text-brand-700 hover:bg-brand-50"
                 title="Modifica"
+                aria-label="Modifica"
               >
                 <Pencil size={17} />
               </button>
             )}
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+            <button onClick={onClose} className="icon-btn" title="Chiudi" aria-label="Chiudi">
               <X size={20} />
             </button>
           </div>
@@ -158,24 +161,24 @@ export default function BookDetailModal({ book, onClose }: Props) {
 
             {/* Cover */}
             <div className="flex-shrink-0 mx-auto sm:mx-0">
-              <div className="w-36 h-52 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl overflow-hidden shadow-md relative">
+              <div className="w-40 h-60 bg-gradient-to-br from-brand-50 to-stone-100 rounded-xl overflow-hidden shadow-lift ring-1 ring-stone-900/5 relative">
                 {displayCover ? (
                   <img
                     src={displayCover}
-                    alt={book.title}
+                    alt={`Copertina di ${book.title}`}
                     className="w-full h-full object-cover"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <BookOpen size={48} className="text-blue-300" />
+                    <BookOpen size={48} className="text-brand-300" />
                   </div>
                 )}
               </div>
               {editing && (
                 <button
                   onClick={() => setPickingCover(true)}
-                  className="btn-secondary text-xs w-36 mt-2 justify-center"
+                  className="btn-secondary text-xs w-40 mt-3 px-2"
                 >
                   <ImagePlus size={14} /> Cambia copertina
                 </button>
@@ -187,62 +190,62 @@ export default function BookDetailModal({ book, onClose }: Props) {
               {editing ? (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Titolo</label>
+                    <label className="label">Titolo</label>
                     <input className="input text-sm" value={form.title} onChange={set('title')} />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Autore</label>
+                    <label className="label">Autore</label>
                     <input className="input text-sm" value={form.author} onChange={set('author')} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Anno</label>
+                      <label className="label">Anno</label>
                       <input className="input text-sm" type="number" value={form.year} onChange={set('year')} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Pagine</label>
+                      <label className="label">Pagine</label>
                       <input className="input text-sm" type="number" value={form.page_count} onChange={set('page_count')} />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">ISBN</label>
+                      <label className="label">ISBN</label>
                       <input className="input text-sm" value={form.isbn} onChange={set('isbn')} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Lingua</label>
+                      <label className="label">Lingua</label>
                       <input className="input text-sm" value={form.language} onChange={set('language')} />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Editore</label>
+                    <label className="label">Editore</label>
                     <input className="input text-sm" value={form.publisher} onChange={set('publisher')} />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Generi (separati da virgola)</label>
+                    <label className="label">Generi (separati da virgola)</label>
                     <input className="input text-sm" value={form.genres} onChange={set('genres')} />
                   </div>
                 </div>
               ) : (
                 <>
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900 leading-tight">{book.title}</h3>
-                    {book.author && <p className="text-base text-gray-600 mt-1">{book.author}</p>}
+                    <h3 className="font-serif text-2xl font-semibold text-stone-900 leading-tight">{book.title}</h3>
+                    {book.author && <p className="text-base text-stone-600 mt-1.5">{book.author}</p>}
                   </div>
 
-                  <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                    {book.year && (<><dt className="text-gray-400">Anno</dt><dd className="text-gray-800 font-medium">{book.year}</dd></>)}
-                    {book.publisher && (<><dt className="text-gray-400">Editore</dt><dd className="text-gray-800 font-medium truncate">{book.publisher}</dd></>)}
-                    {book.isbn && (<><dt className="text-gray-400">ISBN</dt><dd className="text-gray-800 font-medium font-mono text-xs">{book.isbn}</dd></>)}
-                    {book.page_count && (<><dt className="text-gray-400">Pagine</dt><dd className="text-gray-800 font-medium">{book.page_count}</dd></>)}
-                    {book.language && (<><dt className="text-gray-400">Lingua</dt><dd className="text-gray-800 font-medium uppercase">{book.language}</dd></>)}
-                    {currentSection && (<><dt className="text-gray-400">Sezione</dt><dd className="text-gray-800 font-medium">{currentSection.name}</dd></>)}
+                  <dl className="grid grid-cols-[auto,1fr] gap-x-6 gap-y-2 text-sm">
+                    {book.year && (<><dt className="text-stone-400">Anno</dt><dd className="text-stone-800 font-medium">{book.year}</dd></>)}
+                    {book.publisher && (<><dt className="text-stone-400">Editore</dt><dd className="text-stone-800 font-medium truncate">{book.publisher}</dd></>)}
+                    {book.isbn && (<><dt className="text-stone-400">ISBN</dt><dd className="text-stone-800 font-medium font-mono text-xs">{book.isbn}</dd></>)}
+                    {book.page_count && (<><dt className="text-stone-400">Pagine</dt><dd className="text-stone-800 font-medium">{book.page_count}</dd></>)}
+                    {book.language && (<><dt className="text-stone-400">Lingua</dt><dd className="text-stone-800 font-medium uppercase">{book.language}</dd></>)}
+                    {currentSection && (<><dt className="text-stone-400">Sezione</dt><dd className="text-stone-800 font-medium">{currentSection.name}</dd></>)}
                   </dl>
 
                   {genres.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {genres.map((g) => (
-                        <span key={g} className="badge bg-blue-50 text-blue-700 border border-blue-100">{g}</span>
+                        <span key={g} className="badge bg-brand-50 text-brand-700 border border-brand-100">{g}</span>
                       ))}
                     </div>
                   )}
@@ -253,7 +256,7 @@ export default function BookDetailModal({ book, onClose }: Props) {
 
           {/* Description */}
           <div className="px-6 pb-4">
-            <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Trama</h4>
+            <h4 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">Trama</h4>
             {editing ? (
               <textarea
                 className="input text-sm min-h-[120px] resize-y"
@@ -262,15 +265,15 @@ export default function BookDetailModal({ book, onClose }: Props) {
                 placeholder="Descrizione del libro…"
               />
             ) : book.description ? (
-              <p className="text-sm text-gray-700 leading-relaxed">{book.description}</p>
+              <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-line">{book.description}</p>
             ) : (
-              <p className="text-sm text-gray-400 italic">Nessuna trama disponibile.</p>
+              <p className="text-sm text-stone-400 italic">Nessuna trama disponibile.</p>
             )}
           </div>
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50/70">
           {editing ? (
             <>
               <button onClick={cancelEdit} className="btn-secondary text-sm">Annulla</button>
@@ -290,7 +293,7 @@ export default function BookDetailModal({ book, onClose }: Props) {
               <button
                 onClick={() => confirm(`Rimuovere "${book.title}" dalla libreria?`) && deleteMutation.mutate()}
                 disabled={deleteMutation.isPending}
-                className="btn-danger text-sm"
+                className="btn-secondary text-red-600 hover:bg-red-50 hover:border-red-200"
               >
                 <Trash2 size={15} /> {deleteMutation.isPending ? 'Rimozione…' : 'Rimuovi'}
               </button>
@@ -305,11 +308,11 @@ export default function BookDetailModal({ book, onClose }: Props) {
           className="absolute inset-0 z-10 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
           onClick={(e) => e.target === e.currentTarget && setMovingTo(false)}
         >
-          <div className="absolute inset-0 bg-black/40 rounded-2xl" onClick={() => setMovingTo(false)} />
-          <div className="relative z-10 bg-white w-full sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[70vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-900">Sposta in sezione</h3>
-              <button onClick={() => setMovingTo(false)} className="text-gray-400 hover:text-gray-600 p-1">
+          <div className="absolute inset-0 bg-stone-900/40 rounded-3xl" onClick={() => setMovingTo(false)} />
+          <div className="relative z-10 bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-2xl max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
+              <h3 className="font-serif text-lg font-semibold">Sposta in sezione</h3>
+              <button onClick={() => setMovingTo(false)} className="icon-btn" aria-label="Chiudi">
                 <X size={20} />
               </button>
             </div>
@@ -322,14 +325,14 @@ export default function BookDetailModal({ book, onClose }: Props) {
                     onClick={() => { if (!isCurrent) moveMutation.mutate(s.id) }}
                     disabled={isCurrent || moveMutation.isPending}
                     className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl mb-1 transition-colors ${
-                      isCurrent ? 'bg-blue-50 text-blue-700 cursor-default' : 'hover:bg-gray-50 text-gray-800 active:bg-gray-100'
+                      isCurrent ? 'bg-brand-50 text-brand-700 cursor-default' : 'hover:bg-stone-50 text-stone-800 active:bg-stone-100'
                     }`}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm">{s.name}</p>
-                      {s.description && <p className="text-xs text-gray-400 truncate">{s.description}</p>}
+                      {s.description && <p className="text-xs text-stone-400 truncate">{s.description}</p>}
                     </div>
-                    {isCurrent && <span className="text-blue-500 text-xs font-semibold flex-shrink-0">Attuale</span>}
+                    {isCurrent && <span className="text-brand-600 text-xs font-semibold flex-shrink-0">Attuale</span>}
                   </button>
                 )
               })}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, PlusCircle, Clock, Settings, Users, LogOut, Menu, X } from 'lucide-react'
+import { BookOpen, PlusCircle, Clock, Settings, Users, LogOut, Menu, X, Library } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { getPendingCount } from '../api/client'
 
@@ -23,74 +23,83 @@ export default function Layout() {
     navigate('/login')
   }
 
+  const items = [
+    { to: '/collection', label: 'Collezione', icon: <BookOpen size={16} /> },
+    { to: '/add', label: 'Aggiungi libro', icon: <PlusCircle size={16} /> },
+    { to: '/tasks', label: 'Task', icon: <Clock size={16} />, count: pendingCount },
+    { to: '/settings', label: 'Impostazioni', icon: <Settings size={16} /> },
+    ...(user?.role === 'admin' ? [{ to: '/users', label: 'Utenti', icon: <Users size={16} /> }] : []),
+  ]
+
   const navClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-      isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+    `flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+      isActive
+        ? 'bg-brand-50 text-brand-700'
+        : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
     }`
+
+  const countBadge = (n?: number) =>
+    n ? (
+      <span className="ml-0.5 min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full bg-amber-100 text-amber-800 text-[11px] font-semibold">
+        {n}
+      </span>
+    ) : null
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <BookOpen className="text-blue-600" size={22} />
-            <span className="font-bold text-gray-900 hidden sm:block">My Library</span>
-          </div>
+      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-paper/80 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <NavLink to="/collection" className="flex items-center gap-2.5 flex-shrink-0">
+            <span className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center shadow-sm">
+              <Library size={19} />
+            </span>
+            <span className="font-serif text-lg font-semibold text-stone-900 hidden sm:block">
+              La mia libreria
+            </span>
+          </NavLink>
 
-          {/* Desktop nav */}
+          {/* Navigazione desktop */}
           <nav className="hidden md:flex items-center gap-1">
-            <NavLink to="/collection" className={navClass}>
-              <BookOpen size={16} /> Collezione
-            </NavLink>
-            <NavLink to="/add" className={navClass}>
-              <PlusCircle size={16} /> Aggiungi libro
-            </NavLink>
-            <NavLink to="/tasks" className={navClass}>
-              <Clock size={16} /> Task
-              {pendingCount > 0 && (
-                <span className="badge bg-red-100 text-red-700 ml-1">{pendingCount}</span>
-              )}
-            </NavLink>
-            <NavLink to="/settings" className={navClass}>
-              <Settings size={16} /> Impostazioni
-            </NavLink>
-            {user?.role === 'admin' && (
-              <NavLink to="/users" className={navClass}>
-                <Users size={16} /> Utenti
+            {items.map((item) => (
+              <NavLink key={item.to} to={item.to} className={navClass}>
+                {item.icon} {item.label} {countBadge(item.count)}
               </NavLink>
-            )}
+            ))}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500 hidden sm:block">{user?.username}</span>
-            <button onClick={handleLogout} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100" title="Logout">
+          <div className="flex items-center gap-1">
+            <span className="hidden sm:flex items-center gap-2 pr-2 text-sm text-stone-600">
+              <span className="w-7 h-7 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center text-xs font-semibold uppercase">
+                {user?.username?.[0] ?? '?'}
+              </span>
+              {user?.username}
+            </span>
+            <button onClick={handleLogout} className="icon-btn" title="Esci" aria-label="Esci">
               <LogOut size={18} />
             </button>
-            <button className="md:hidden p-1.5 text-gray-600" onClick={() => setMenuOpen(!menuOpen)}>
+            <button
+              className="md:hidden icon-btn text-stone-600"
+              onClick={() => setMenuOpen(!menuOpen)}
+              aria-label={menuOpen ? 'Chiudi menu' : 'Apri menu'}
+            >
               {menuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
         </div>
 
-        {/* Mobile nav */}
+        {/* Navigazione mobile */}
         {menuOpen && (
-          <div className="md:hidden border-t border-gray-100 bg-white px-4 py-2 flex flex-col gap-1">
-            {[
-              { to: '/collection', label: 'Collezione', icon: <BookOpen size={16} /> },
-              { to: '/add', label: 'Aggiungi libro', icon: <PlusCircle size={16} /> },
-              { to: '/tasks', label: `Task${pendingCount > 0 ? ` (${pendingCount})` : ''}`, icon: <Clock size={16} /> },
-              { to: '/settings', label: 'Impostazioni', icon: <Settings size={16} /> },
-              ...(user?.role === 'admin' ? [{ to: '/users', label: 'Utenti', icon: <Users size={16} /> }] : []),
-            ].map((item) => (
+          <div className="md:hidden border-t border-stone-200/70 bg-paper px-4 py-3 flex flex-col gap-1">
+            {items.map((item) => (
               <NavLink key={item.to} to={item.to} className={navClass} onClick={() => setMenuOpen(false)}>
-                {item.icon} {item.label}
+                {item.icon} {item.label} {countBadge(item.count)}
               </NavLink>
             ))}
           </div>
         )}
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
         <Outlet />
       </main>
     </div>

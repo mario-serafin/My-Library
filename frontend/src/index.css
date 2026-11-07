@@ -4,30 +4,75 @@
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-paper text-stone-900 antialiased;
+  }
+  h1, h2, h3 {
+    @apply text-stone-900;
   }
 }
 
 @layer components {
+  .page-title {
+    @apply font-serif text-3xl font-semibold tracking-tight text-stone-900;
+  }
+  .page-subtitle {
+    @apply text-sm text-stone-500 mt-1;
+  }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98];
   }
   .btn-primary {
-    @apply btn bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+    @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus-visible:ring-brand-500;
   }
   .btn-secondary {
-    @apply btn bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-blue-500;
+    @apply btn bg-white text-stone-700 border border-stone-200 shadow-sm hover:bg-stone-50 hover:border-stone-300 focus-visible:ring-brand-500;
   }
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+    @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-500;
+  }
+  .btn-ghost {
+    @apply btn text-stone-600 hover:bg-stone-100 hover:text-stone-900 focus-visible:ring-brand-500;
+  }
+  .icon-btn {
+    @apply inline-flex items-center justify-center p-2 rounded-lg text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500;
   }
   .input {
-    @apply block w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500;
+    @apply block w-full rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm text-stone-900 placeholder-stone-400 shadow-sm transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10;
+  }
+  .label {
+    @apply block text-xs font-medium text-stone-500 mb-1.5;
   }
   .card {
-    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
+    @apply bg-white rounded-2xl border border-stone-200/80 shadow-soft;
   }
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors;
+  }
+  .chip-on {
+    @apply chip bg-brand-600 border-brand-600 text-white shadow-sm;
+  }
+  .chip-off {
+    @apply chip bg-white border-stone-200 text-stone-600 hover:border-stone-300 hover:text-stone-900;
+  }
+  .skeleton {
+    @apply bg-stone-200/70 animate-pulse;
+  }
+  .modal-backdrop {
+    @apply fixed inset-0 bg-stone-900/50 backdrop-blur-[2px] flex items-center justify-center p-4;
+  }
+  .modal-panel {
+    @apply bg-white rounded-3xl shadow-2xl w-full;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }

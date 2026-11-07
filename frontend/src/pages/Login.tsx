@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen } from 'lucide-react'
+import { Library } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { login } from '../api/client'
+import { apiStatus, errorMessage } from '../api/errors'
 import { useAuthStore } from '../store/authStore'
 
 export default function Login() {
@@ -20,28 +21,31 @@ export default function Login() {
       const res = await login(username, password)
       setAuth(res.data.user, res.data.access_token)
       navigate('/collection')
-    } catch {
-      toast.error('Invalid username or password')
+    } catch (err) {
+      // Distingue credenziali errate da problemi di rete/server
+      if (apiStatus(err) === 401) toast.error('Nome utente o password non corretti')
+      else toast.error(errorMessage(err, 'Accesso non riuscito. Riprova.'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="card w-full max-w-sm p-8">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mb-4">
-            <BookOpen size={28} className="text-white" />
+    <div className="min-h-screen flex items-center justify-center p-4 bg-paper bg-[radial-gradient(ellipse_at_top,_theme(colors.brand.100),_transparent_60%)]">
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center mb-8 text-center">
+          <div className="w-14 h-14 bg-brand-600 rounded-2xl flex items-center justify-center mb-4 shadow-lift">
+            <Library size={28} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">My Library</h1>
-          <p className="text-sm text-gray-500 mt-1">Sign in to your account</p>
+          <h1 className="font-serif text-3xl font-semibold">La mia libreria</h1>
+          <p className="text-sm text-stone-500 mt-1.5">Accedi per consultare la tua collezione</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="card p-7 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <label className="label" htmlFor="username">Nome utente</label>
             <input
+              id="username"
               className="input"
               type="text"
               value={username}
@@ -49,11 +53,13 @@ export default function Login() {
               placeholder="admin"
               autoFocus
               autoComplete="username"
+              autoCapitalize="none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label className="label" htmlFor="password">Password</label>
             <input
+              id="password"
               className="input"
               type="password"
               value={password}
@@ -62,8 +68,8 @@ export default function Login() {
               autoComplete="current-password"
             />
           </div>
-          <button type="submit" disabled={loading} className="btn-primary w-full mt-2">
-            {loading ? 'Signing in…' : 'Sign in'}
+          <button type="submit" disabled={loading} className="btn-primary w-full py-2.5 mt-2">
+            {loading ? 'Accesso in corso…' : 'Accedi'}
           </button>
         </form>
       </div>

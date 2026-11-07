@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, PlusCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { BookOpen, PlusCircle, Search, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { getBooks, getSections } from '../api/client'
 import BookCard from '../components/BookCard'
 
@@ -31,7 +31,18 @@ export default function Collection() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    setSearch(searchInput)
+    setSearch(searchInput.trim())
+    setPage(1)
+  }
+
+  const clearSearch = () => {
+    setSearchInput('')
+    setSearch('')
+    setPage(1)
+  }
+
+  const selectSection = (id: number | null) => {
+    setSectionFilter(id)
     setPage(1)
   }
 
@@ -41,101 +52,124 @@ export default function Collection() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+      {/* Intestazione */}
+      <div className="flex flex-col sm:flex-row sm:items-end gap-4 mb-8">
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">Collection</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{total} book{total !== 1 ? 's' : ''}</p>
+          <h1 className="page-title">La tua collezione</h1>
+          <p className="page-subtitle">
+            {total} {total === 1 ? 'libro' : 'libri'}
+            {search && <> per «{search}»</>}
+          </p>
         </div>
         <button onClick={() => navigate('/add')} className="btn-primary self-start sm:self-auto">
-          <PlusCircle size={18} /> Add Book
+          <PlusCircle size={18} /> Aggiungi libro
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <form onSubmit={handleSearch} className="flex gap-2 flex-1 max-w-md">
+      {/* Ricerca */}
+      <form onSubmit={handleSearch} className="flex gap-2 mb-4">
+        <div className="relative flex-1 min-w-0">
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
           <input
-            className="input flex-1"
-            placeholder="Search title or author…"
+            className="input pl-11 pr-10 py-3"
+            placeholder="Cerca per titolo o autore…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
+            aria-label="Cerca per titolo o autore"
           />
-          <button type="submit" className="btn-secondary px-3">
-            <Search size={16} />
-          </button>
-        </form>
-
-        {/* Section tabs */}
-        <div className="flex gap-1.5 flex-wrap">
-          <button
-            onClick={() => { setSectionFilter(null); setPage(1) }}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              sectionFilter === null ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Tutti
-          </button>
-          {sections?.map((s: { id: number; name: string }) => (
+          {searchInput && (
             <button
-              key={s.id}
-              onClick={() => { setSectionFilter(s.id); setPage(1) }}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                sectionFilter === s.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              type="button"
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 -translate-y-1/2 icon-btn p-1.5"
+              aria-label="Cancella ricerca"
+              title="Cancella ricerca"
             >
-              {s.name}
+              <X size={16} />
             </button>
-          ))}
+          )}
         </div>
+        <button type="submit" className="btn-secondary px-5">
+          Cerca
+        </button>
+      </form>
+
+      {/* Sezioni */}
+      <div className="flex gap-2 flex-wrap mb-8">
+        <button
+          onClick={() => selectSection(null)}
+          className={sectionFilter === null ? 'chip-on' : 'chip-off'}
+        >
+          Tutte
+        </button>
+        {sections?.map((s: { id: number; name: string }) => (
+          <button
+            key={s.id}
+            onClick={() => selectSection(s.id)}
+            className={sectionFilter === s.id ? 'chip-on' : 'chip-off'}
+          >
+            {s.name}
+          </button>
+        ))}
       </div>
 
-      {/* Books grid */}
+      {/* Griglia libri */}
       {isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-5 gap-y-8">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="card animate-pulse">
-              <div className="aspect-[2/3] bg-gray-200 rounded-t-xl" />
-              <div className="p-3 space-y-2">
-                <div className="h-3 bg-gray-200 rounded" />
-                <div className="h-3 bg-gray-200 rounded w-2/3" />
+            <div key={i}>
+              <div className="aspect-[2/3] skeleton rounded-xl" />
+              <div className="pt-3 space-y-2">
+                <div className="h-3 skeleton rounded" />
+                <div className="h-3 skeleton rounded w-2/3" />
               </div>
             </div>
           ))}
         </div>
       ) : books.length === 0 ? (
-        <div className="text-center py-16">
-          <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-500">No books found</h3>
-          {!search && (
-            <p className="text-sm text-gray-400 mt-1">
-              Add your first book using the button above.
-            </p>
+        <div className="card text-center py-16 px-6">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand-50 flex items-center justify-center">
+            <BookOpen size={30} className="text-brand-500" />
+          </div>
+          <h3 className="font-serif text-xl font-semibold">Nessun libro trovato</h3>
+          <p className="text-sm text-stone-500 mt-1">
+            {search
+              ? 'Prova con un altro titolo o autore.'
+              : 'Aggiungi il tuo primo libro con il pulsante in alto.'}
+          </p>
+          {search && (
+            <button onClick={clearSearch} className="btn-secondary mt-5">
+              Mostra tutti i libri
+            </button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-5 gap-y-8">
           {books.map((book: { id: number }) => (
             <BookCard key={book.id} book={book as any} />
           ))}
         </div>
       )}
 
-      {/* Pagination */}
+      {/* Paginazione */}
       {pages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-8">
+        <div className="flex items-center justify-center gap-3 mt-12">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="btn-secondary px-3 py-2"
+            className="btn-secondary px-3"
+            aria-label="Pagina precedente"
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="text-sm text-gray-600">Page {page} of {pages}</span>
+          <span className="text-sm text-stone-600">
+            Pagina <span className="font-semibold text-stone-900">{page}</span> di {pages}
+          </span>
           <button
             onClick={() => setPage((p) => Math.min(pages, p + 1))}
             disabled={page === pages}
-            className="btn-secondary px-3 py-2"
+            className="btn-secondary px-3"
+            aria-label="Pagina successiva"
           >
             <ChevronRight size={16} />
           </button>

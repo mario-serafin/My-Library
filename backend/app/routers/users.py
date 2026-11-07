@@ -21,7 +21,7 @@ async def list_users(db: AsyncSession = Depends(get_db), _: User = Depends(requi
 async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
     existing = await db.execute(select(User).where(User.username == data.username))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Username already taken")
+        raise HTTPException(status_code=409, detail="Nome utente già in uso")
     user = User(
         username=data.username,
         email=data.email,
@@ -57,7 +57,7 @@ async def update_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Utente non trovato")
     update_data = data.model_dump(exclude_none=True)
     if "password" in update_data:
         update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
@@ -75,10 +75,10 @@ async def delete_user(
     current_admin: User = Depends(require_admin),
 ):
     if user_id == current_admin.id:
-        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+        raise HTTPException(status_code=400, detail="Non puoi eliminare il tuo account")
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Utente non trovato")
     await db.delete(user)
     await db.commit()
